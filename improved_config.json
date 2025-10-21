@@ -1,0 +1,28 @@
+{
+  "TargetURL": "http://testphp.vulnweb.com/",
+  "DepthSettings": {
+    "MaxDepth": 4,
+    "SchedulingAlgorithm": "BFS",
+    "DeepCrawling": true
+  },
+  "StrategySettings": {
+    "EnableStaticCrawler": true,
+    "EnableDynamicCrawler": true,
+    "EnableJSAnalysis": true,
+    "EnableAPIInference": true
+  },
+  "AntiDetectionSettings": {
+    "EnableRandomDelay": true,
+    "RequestDelay": 500,
+    "EnableUserAgentRotation": true
+  },
+  "DeduplicationSettings": {
+    "EnableDeduplication": true,
+    "SimilarityThreshold": 0.85
+  },
+  "OutputSettings": {
+    "EnableTXTReport": true,
+    "EnableJSONReport": true,
+    "EnableCSVReport": true
+  }
+}

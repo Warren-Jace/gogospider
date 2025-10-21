@@ -1,0 +1,99 @@
+=== 安全爬虫扫描报告 ===
+扫描时间: 2025-10-20 16:48:16
+发现的链接总数: 162
+发现的表单总数: 9
+发现的API总数: 0
+发现的隐藏路径总数: 6
+安全发现总数: 0
+
+=== 隐藏路径发现 ===
+ADMIN_PATH: http://testphp.vulnweb.com/admin
+ADMIN_PATH: http://testphp.vulnweb.com/admin/
+CONFIG_FILE: http://testphp.vulnweb.com/CVS/Entries
+CONFIG_FILE: http://testphp.vulnweb.com/.idea/workspace.xml
+COMMON_PATH: http://testphp.vulnweb.com/images
+ADMIN_PATH: http://testphp.vulnweb.com/vendor
+
+
+=== POST表单 (去重后) ===
+
+[1] search.php?test={value}
+    字段列表:
+      - searchFor (text)
+      - goButton (submit)
+    说明: 此表单模式在网站中出现了 9 次
+    测试示例: POST search.php?test={value}
+              数据: searchFor=test_value&goButton=go
+
+
+
+=== GET参数URL (去重后) ===
+
+[1] http://testphp.vulnweb.com/listproducts.php?cat={value}
+    参数: cat=[1,2,3,4]
+    说明: 发现 4 个此模式的URL实例
+    测试: http://testphp.vulnweb.com/listproducts.php?cat=1
+
+[2] http://testphp.vulnweb.com/artists.php?artist={value}
+    参数: artist=[1,2,3]
+    说明: 发现 3 个此模式的URL实例
+    测试: http://testphp.vulnweb.com/artists.php?artist=1
+
+[3] http://testphp.vulnweb.com/hpp/?pp={value}
+    参数: pp=12
+    测试: http://testphp.vulnweb.com/hpp/?pp=12
+
+--- 去重统计 ---
+原始URL数: 31 个
+去重后: 26 个唯一模式
+节省: 5 个重复URL (16.1%)
+
+
+=== API端点 ===
+未发现API端点
+
+
+=== URL汇总 (去重后) ===
+
+[普通页面] (23个)
+  1. http://testphp.vulnweb.com
+  2. http://testphp.vulnweb.com/index.php
+  3. http://testphp.vulnweb.com/categories.php
+  4. http://testphp.vulnweb.com/artists.php
+  5. http://testphp.vulnweb.com/disclaimer.php
+  6. http://testphp.vulnweb.com/cart.php
+  7. http://testphp.vulnweb.com/guestbook.php
+  8. http://testphp.vulnweb.com/AJAX/index.php
+  9. http://testphp.vulnweb.com/login.php
+  10. http://testphp.vulnweb.com/userinfo.php
+  11. http://testphp.vulnweb.com/privacy.php
+  12. http://testphp.vulnweb.com/Mod_Rewrite_Shop/
+  13. http://testphp.vulnweb.com/hpp/
+  14. http://testphp.vulnweb.com/signup.php
+  15. http://testphp.vulnweb.com/Mod_Rewrite_Shop/Details/network-attached-storage-dlink/1/
+  16. http://testphp.vulnweb.com/Mod_Rewrite_Shop/Details/web-camera-a4tech/2/
+  17. http://testphp.vulnweb.com/Mod_Rewrite_Shop/Details/color-printer/3/
+  18. https://www.acunetix.com/
+  19. https://www.acunetix.com/vulnerability-scanner/
+  20. http://www.acunetix.com/
+  21. https://www.acunetix.com/vulnerability-scanner/php-security-scanner/
+  22. https://www.acunetix.com/blog/articles/prevent-sql-injection-vulnerabilities-in-php-applications/
+  23. http://www.eclectasy.com/Fractal-Explorer/index.html
+
+[带参数页面] (3个模式)
+  详见上方 'GET参数URL (去重后)' 部分
+
+[静态资源] (5个)
+  1. http://testphp.vulnweb.com/style.css
+  2. http://testphp.vulnweb.com/images/logo.gif
+  3. http://testphp.vulnweb.com/Mod_Rewrite_Shop/images/1.jpg
+  4. http://testphp.vulnweb.com/Mod_Rewrite_Shop/images/2.jpg
+  5. http://testphp.vulnweb.com/Mod_Rewrite_Shop/images/3.jpg
+
+[外部链接] (5个)
+  1. https://www.acunetix.com/
+  2. https://www.acunetix.com/vulnerability-scanner/
+  3. http://www.acunetix.com/
+  4. https://www.acunetix.com/vulnerability-scanner/php-security-scanner/
+  5. https://www.acunetix.com/blog/articles/prevent-sql-injection-vulnerabilities-in-php-applications/
+

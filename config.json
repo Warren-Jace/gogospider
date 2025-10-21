@@ -1,0 +1,13 @@
+{
+  "TargetURL": "http://testphp.vulnweb.com/",
+  "DepthSettings": {
+    "MaxDepth": 3,
+    "SchedulingAlgorithm": "BFS",
+    "DeepCrawling": false
+  },
+  "DeduplicationSettings": {
+    "EnableURLPatternRecognition": true,
+    "EnableDOMDeduplication": true,
+    "SimilarityThreshold": 0.9
+  }
+}
