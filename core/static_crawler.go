@@ -222,6 +222,15 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		result.StatusCode = r.StatusCode
 		result.ContentType = r.Headers.Get("Content-Type")
 		
+		// 保存HTML内容和Headers供高级检测使用
+		result.HTMLContent = string(r.Body)
+		result.Headers = make(map[string]string)
+		for key, values := range *r.Headers {
+			if len(values) > 0 {
+				result.Headers[key] = values[0]
+			}
+		}
+		
 		// 保存响应数据包
 		if err := s.saveResponseToFile(r.Request.URL.String(), r.Body, result.ContentType); err != nil {
 			fmt.Printf("保存响应数据包失败 %s: %v\n", r.Request.URL.String(), err)

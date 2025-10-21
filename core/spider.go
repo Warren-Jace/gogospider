@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,11 +24,25 @@ type Spider struct {
 	hiddenPathDiscovery *HiddenPathDiscovery
 	cdnDetector        *CDNDetector // CDN检测器
 	workerPool         *WorkerPool  // 并发工作池
+	
+	// 新增优化组件
+	formFiller         *SmartFormFiller        // 智能表单填充器
+	advancedScope      *AdvancedScope          // 高级作用域控制
+	perfOptimizer      *PerformanceOptimizer   // 性能优化器
+	
+	// 高级功能组件
+	techDetector       *TechStackDetector      // 技术栈检测器
+	sensitiveDetector  *SensitiveInfoDetector  // 敏感信息检测器
+	passiveCrawler     *PassiveCrawler         // 被动爬取器
+	subdomainExtractor *SubdomainExtractor     // 子域名提取器
+	
 	results            []*Result
 	externalLinks      []string // 记录外部链接
 	hiddenPaths        []string // 记录隐藏路径
 	securityFindings   []string // 记录安全发现
 	crossDomainJS      []string // 记录跨域JS发现的URL
+	detectedTechs      []*TechInfo // 检测到的技术栈
+	sensitiveFindings  []*SensitiveInfo // 敏感信息发现
 	mutex              sync.Mutex
 	targetDomain       string          // 目标域名
 	visitedURLs        map[string]bool // 已访问URL
@@ -60,12 +73,25 @@ func NewSpider(cfg *config.Config) *Spider {
 		smartDeduplication: NewSmartDeduplication(), // 初始化智能去重
 		cdnDetector:        NewCDNDetector(), // 初始化CDN检测器
 		workerPool:         NewWorkerPool(workerCount, maxQPS), // 初始化工作池
+		
+		// 初始化新增组件
+		formFiller:         NewSmartFormFiller(),          // 智能表单填充器
+		advancedScope:      nil,                           // 将在Start中初始化
+		perfOptimizer:      NewPerformanceOptimizer(500),  // 性能优化器（限制500MB）
+		
+		// 初始化高级功能组件
+		techDetector:       NewTechStackDetector(),        // 技术栈检测器
+		sensitiveDetector:  NewSensitiveInfoDetector(),    // 敏感信息检测器
+		passiveCrawler:     nil,                           // 按需创建
+		
 		hiddenPathDiscovery: nil, // 将在Start方法中初始化，需要用户代理
 		results:            make([]*Result, 0),
 		externalLinks:      make([]string, 0),
 		hiddenPaths:        make([]string, 0),
 		securityFindings:   make([]string, 0),
 		crossDomainJS:      make([]string, 0),
+		detectedTechs:      make([]*TechInfo, 0),
+		sensitiveFindings:  make([]*SensitiveInfo, 0),
 		visitedURLs:        make(map[string]bool),
 	}
 	
@@ -91,6 +117,14 @@ func (s *Spider) Start(targetURL string) error {
 	// 设置JS分析器的目标域名
 	s.jsAnalyzer.SetTargetDomain(s.targetDomain)
 	
+	// 初始化高级作用域控制
+	s.advancedScope = NewAdvancedScope(s.targetDomain)
+	s.advancedScope.SetMode(ScopeRDN) // 根域名模式
+	s.advancedScope.PresetStaticFilterScope() // 过滤静态资源
+	
+	// 初始化子域名提取器
+	s.subdomainExtractor = NewSubdomainExtractor(targetURL)
+	
 	// 检查是否重复
 	if s.duplicateHandler.IsDuplicateURL(targetURL) {
 		return fmt.Errorf("URL已处理过: %s", targetURL)
@@ -98,7 +132,15 @@ func (s *Spider) Start(targetURL string) error {
 	
 	fmt.Printf("开始爬取URL: %s\n", targetURL)
 	fmt.Printf("限制域名范围: %s\n", s.targetDomain)
-	fmt.Printf("跨域JS分析: 已启用（支持CDN和同源域名）\n")
+	fmt.Printf("\n【已启用功能】\n")
+	fmt.Printf("  ✓ 跨域JS分析（支持60+个CDN）\n")
+	fmt.Printf("  ✓ 智能表单填充（支持20+种字段类型）\n")
+	fmt.Printf("  ✓ 作用域精确控制（10个过滤维度）\n")
+	fmt.Printf("  ✓ 性能优化（对象池+连接池）\n")
+	fmt.Printf("  ✓ 技术栈识别（15+种框架）\n")
+	fmt.Printf("  ✓ 敏感信息检测（30+种模式）\n")
+	fmt.Printf("  ✓ JavaScript事件触发（点击、悬停、输入、滚动）🆕\n")
+	fmt.Printf("\n")
 	
 	// 初始化隐藏路径发现器
 	userAgent := ""
@@ -173,11 +215,126 @@ func (s *Spider) shouldUseDynamicCrawler() bool {
 	return false
 }
 
-// addResult 添加爬取结果
+// addResult 添加爬取结果（增强版：包含技术栈检测和敏感信息检测）
 func (s *Spider) addResult(result *Result) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	
 	s.results = append(s.results, result)
+	
+	// 如果有HTML内容，进行高级检测
+	if result.HTMLContent != "" {
+		// 技术栈检测
+		if s.techDetector != nil {
+			techs := s.techDetector.DetectFromContent(result.HTMLContent, result.Headers)
+			s.detectedTechs = append(s.detectedTechs, techs...)
+			
+			if len(techs) > 0 {
+				techNames := make([]string, 0)
+				for _, tech := range techs {
+					if tech.Version != "" {
+						techNames = append(techNames, tech.Name+" "+tech.Version)
+					} else {
+						techNames = append(techNames, tech.Name)
+					}
+				}
+				fmt.Printf("  [技术栈] 检测到: %s\n", strings.Join(techNames, ", "))
+			}
+		}
+		
+		// 敏感信息检测
+		if s.sensitiveDetector != nil {
+			// 扫描HTML内容
+			findings := s.sensitiveDetector.Scan(result.HTMLContent, result.URL)
+			s.sensitiveFindings = append(s.sensitiveFindings, findings...)
+			
+			// 扫描HTTP头
+			if len(result.Headers) > 0 {
+				headerContent := ""
+				for key, value := range result.Headers {
+					headerContent += key + ": " + value + "\n"
+				}
+				headerFindings := s.sensitiveDetector.Scan(headerContent, result.URL+" (Headers)")
+				s.sensitiveFindings = append(s.sensitiveFindings, headerFindings...)
+				findings = append(findings, headerFindings...)
+			}
+			
+			if len(findings) > 0 {
+				highCount := 0
+				for _, finding := range findings {
+					if finding.Severity == "HIGH" {
+						highCount++
+					}
+				}
+				
+				if highCount > 0 {
+					fmt.Printf("  [敏感信息] ⚠️  发现 %d 处高危敏感信息！\n", highCount)
+				} else if len(findings) > 0 {
+					fmt.Printf("  [敏感信息] 发现 %d 处敏感信息\n", len(findings))
+				}
+			}
+		}
+	}
+}
+
+// addResultWithDetection 添加结果并进行检测
+func (s *Spider) addResultWithDetection(result *Result, response *http.Response, htmlContent string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	s.results = append(s.results, result)
+	
+	// 技术栈检测
+	if response != nil && s.techDetector != nil {
+		techs := s.techDetector.Detect(response, htmlContent)
+		s.detectedTechs = append(s.detectedTechs, techs...)
+		
+		if len(techs) > 0 {
+			fmt.Printf("  [技术栈] 检测到: ")
+			techNames := make([]string, 0)
+			for _, tech := range techs {
+				if tech.Version != "" {
+					techNames = append(techNames, tech.Name+" "+tech.Version)
+				} else {
+					techNames = append(techNames, tech.Name)
+				}
+			}
+			fmt.Printf("%s\n", strings.Join(techNames, ", "))
+		}
+	}
+	
+	// 敏感信息检测
+	if s.sensitiveDetector != nil {
+		findings := s.sensitiveDetector.Scan(htmlContent, result.URL)
+		s.sensitiveFindings = append(s.sensitiveFindings, findings...)
+		
+		if len(findings) > 0 {
+			highCount := 0
+			for _, finding := range findings {
+				if finding.Severity == "HIGH" {
+					highCount++
+				}
+			}
+			
+			if highCount > 0 {
+				fmt.Printf("  [敏感信息] ⚠️  发现 %d 处高危敏感信息！\n", highCount)
+			} else {
+				fmt.Printf("  [敏感信息] 发现 %d 处敏感信息\n", len(findings))
+			}
+		}
+	}
+	
+	// 子域名提取
+	if s.subdomainExtractor != nil && htmlContent != "" {
+		// 从HTML内容提取子域名
+		subdomains := s.subdomainExtractor.ExtractFromHTML(htmlContent)
+		if len(subdomains) > 0 {
+			fmt.Printf("  [子域名] 发现 %d 个新子域名\n", len(subdomains))
+		}
+		
+		// 从URL本身提取
+		s.subdomainExtractor.ExtractFromURL(result.URL)
+	}
 }
 
 // GetResults 获取所有爬取结果
@@ -341,13 +498,9 @@ func (s *Spider) processCrossDomainJS() {
 	fmt.Printf("跨域JS分析完成！共从 %d 个JS文件中提取了 %d 个目标域名URL\n\n", len(jsToAnalyze), totalURLsFound)
 }
 
-// analyzeExternalJS 下载并分析外部JS文件
+// analyzeExternalJS 下载并分析外部JS文件（使用性能优化）
 func (s *Spider) analyzeExternalJS(jsURL string) []string {
-	// 使用HTTP客户端下载JS内容
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	
+	// 使用性能优化的HTTP客户端
 	req, err := http.NewRequest("GET", jsURL, nil)
 	if err != nil {
 		fmt.Printf("    创建请求失败: %v\n", err)
@@ -361,7 +514,8 @@ func (s *Spider) analyzeExternalJS(jsURL string) []string {
 		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 	}
 	
-	resp, err := client.Do(req)
+	// 使用优化的HTTP客户端（带连接池）
+	resp, err := s.perfOptimizer.DoRequest(req)
 	if err != nil {
 		fmt.Printf("    下载失败: %v\n", err)
 		return []string{}
@@ -374,19 +528,22 @@ func (s *Spider) analyzeExternalJS(jsURL string) []string {
 		return []string{}
 	}
 	
+	// 使用Buffer池读取内容
+	buf := s.perfOptimizer.GetBuffer()
+	defer s.perfOptimizer.PutBuffer(buf)
+	
 	// 限制文件大小（最大5MB）
 	const maxSize = 5 * 1024 * 1024
 	limitedReader := &io.LimitedReader{R: resp.Body, N: maxSize}
 	
-	// 读取内容
-	content, err := ioutil.ReadAll(limitedReader)
+	_, err = buf.ReadFrom(limitedReader)
 	if err != nil {
 		fmt.Printf("    读取内容失败: %v\n", err)
 		return []string{}
 	}
 	
 	// 使用JS分析器提取URL
-	urls := s.jsAnalyzer.ExtractRelativeURLs(string(content))
+	urls := s.jsAnalyzer.ExtractRelativeURLs(buf.String())
 	
 	return urls
 }
@@ -408,8 +565,9 @@ func (s *Spider) crawlRecursively() {
 				continue
 			}
 			
-			// 检查是否为同一域名
-			if parsedURL.Host == s.targetDomain || parsedURL.Host == "" {
+			// 使用高级作用域控制
+			inScope, reason := s.advancedScope.InScope(link)
+			if inScope {
 				// 规范化URL
 				normalizedURL, err := s.paramHandler.NormalizeURL(link)
 				if err == nil {
@@ -418,8 +576,12 @@ func (s *Spider) crawlRecursively() {
 					allLinks[link] = true
 				}
 			} else {
-				// 记录外部链接但不爬取
+				// 记录外部链接或被过滤的链接
+				if parsedURL.Host != s.targetDomain && parsedURL.Host != "" {
 				externalLinks = append(externalLinks, link)
+				}
+				// 可以记录被过滤的原因用于调试
+				_ = reason
 			}
 		}
 	}
@@ -528,7 +690,7 @@ func (s *Spider) crawlURL(targetURL string) (*Result, error) {
 		// 如果静态爬虫失败，尝试动态爬虫
 		if s.config.StrategySettings.EnableDynamicCrawler {
 			result, err = s.dynamicCrawler.Crawl(parsedURL)
-			if err != nil {
+		if err != nil {
 				return nil, fmt.Errorf("爬取失败: %v", err)
 			}
 		} else {
@@ -565,11 +727,64 @@ func (s *Spider) showProgress() {
 	}
 }
 
+// ImportFromBurp 从Burp Suite文件导入
+func (s *Spider) ImportFromBurp(filename string) error {
+	fmt.Printf("从Burp Suite导入流量: %s\n", filename)
+	
+	// 创建被动爬取器
+	s.passiveCrawler = NewPassiveCrawler("burp")
+	
+	// 加载Burp文件
+	err := s.passiveCrawler.LoadFromBurp(filename)
+	if err != nil {
+		return err
+	}
+	
+	// 过滤目标域名的URL
+	targetURLs := s.passiveCrawler.FilterByDomain(s.targetDomain)
+	fmt.Printf("过滤后得到目标域名URL: %d个\n", len(targetURLs))
+	
+	// 将导入的URL和表单加入结果
+	passiveResult := s.passiveCrawler.ExportToResult(s.targetDomain)
+	s.addResult(passiveResult)
+	
+	return nil
+}
+
+// ImportFromHAR 从HAR文件导入
+func (s *Spider) ImportFromHAR(filename string) error {
+	fmt.Printf("从HAR文件导入流量: %s\n", filename)
+	
+	// 创建被动爬取器
+	s.passiveCrawler = NewPassiveCrawler("har")
+	
+	// 加载HAR文件
+	err := s.passiveCrawler.LoadFromHAR(filename)
+	if err != nil {
+		return err
+	}
+	
+	// 过滤目标域名的URL
+	targetURLs := s.passiveCrawler.FilterByDomain(s.targetDomain)
+	fmt.Printf("过滤后得到目标域名URL: %d个\n", len(targetURLs))
+	
+	// 将导入的URL和表单加入结果
+	passiveResult := s.passiveCrawler.ExportToResult(s.targetDomain)
+	s.addResult(passiveResult)
+	
+	return nil
+}
+
 // Stop 停止爬取
 func (s *Spider) Stop() {
 	fmt.Println("停止爬取...")
 	s.staticCrawler.Stop()
 	s.dynamicCrawler.Stop()
+	
+	// 关闭性能优化器
+	if s.perfOptimizer != nil {
+		s.perfOptimizer.Close()
+	}
 }
 
 // IsValidURL 检查URL是否为有效的HTTP/HTTPS链接
@@ -674,6 +889,36 @@ func (s *Spider) ExportResults() map[string]interface{} {
 	exportData["deduplication_stats"] = s.smartDeduplication.GetDeduplicationStats()
 	exportData["unique_url_patterns"] = s.smartDeduplication.GetUniqueURLs()
 	exportData["unique_form_patterns"] = s.smartDeduplication.GetUniqueForms()
+	
+	// 添加新功能统计
+	if s.advancedScope != nil {
+		exportData["scope_stats"] = s.advancedScope.GetStatistics()
+	}
+	if s.perfOptimizer != nil {
+		exportData["performance_stats"] = s.perfOptimizer.GetStatistics()
+	}
+	if s.formFiller != nil {
+		exportData["form_filler_stats"] = s.formFiller.GetStatistics()
+	}
+	
+	// 添加高级功能统计
+	exportData["detected_technologies"] = s.detectedTechs
+	exportData["tech_stack_summary"] = s.techDetector.GetTechStackSummary(s.detectedTechs)
+	exportData["sensitive_findings"] = s.sensitiveFindings
+	exportData["sensitive_stats"] = s.sensitiveDetector.GetStatistics()
+	exportData["total_sensitive_findings"] = len(s.sensitiveFindings)
+	
+	// 被动爬取统计（如果使用）
+	if s.passiveCrawler != nil {
+		exportData["passive_stats"] = s.passiveCrawler.GetStatistics()
+	}
+	
+	// 子域名提取统计
+	if s.subdomainExtractor != nil {
+		exportData["subdomains"] = s.subdomainExtractor.ExportSubdomains()
+		exportData["subdomain_stats"] = s.subdomainExtractor.GetStatistics()
+		exportData["total_subdomains"] = s.subdomainExtractor.GetSubdomainCount()
+	}
 	
 	return exportData
 }

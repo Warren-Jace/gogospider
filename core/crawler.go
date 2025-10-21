@@ -14,6 +14,10 @@ type Result struct {
 	Assets      []string
 	Forms       []Form
 	APIs        []string
+	
+	// 用于高级检测
+	HTMLContent string            // HTML内容（用于技术栈和敏感信息检测）
+	Headers     map[string]string // HTTP响应头
 }
 
 // Form 表单信息

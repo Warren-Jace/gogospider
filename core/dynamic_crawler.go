@@ -13,10 +13,12 @@ import (
 
 // DynamicCrawlerImpl 动态爬虫实现
 type DynamicCrawlerImpl struct {
-	config    *config.Config
-	ctx       context.Context
-	cancel    context.CancelFunc
-	timeout   time.Duration
+	config       *config.Config
+	ctx          context.Context
+	cancel       context.CancelFunc
+	timeout      time.Duration
+	eventTrigger *EventTrigger // 事件触发器
+	enableEvents bool          // 是否启用事件触发
 }
 
 // NewDynamicCrawler 创建动态爬虫实例
@@ -25,10 +27,17 @@ func NewDynamicCrawler() *DynamicCrawlerImpl {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	
 	return &DynamicCrawlerImpl{
-		ctx:     ctx,
-		cancel:  cancel,
-		timeout: 30 * time.Second,
+		ctx:          ctx,
+		cancel:       cancel,
+		timeout:      30 * time.Second,
+		eventTrigger: NewEventTrigger(),
+		enableEvents: true, // 默认启用事件触发
 	}
+}
+
+// SetEnableEvents 设置是否启用事件触发
+func (d *DynamicCrawlerImpl) SetEnableEvents(enable bool) {
+	d.enableEvents = enable
 }
 
 // Configure 配置动态爬虫
@@ -237,6 +246,59 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 	if err == nil {
 		result.StatusCode = int(statusCode)
 		result.ContentType = contentType
+	}
+	
+	// 保存HTML内容供后续检测使用
+	result.HTMLContent = htmlContent
+	result.Headers = make(map[string]string)
+	result.Headers["Content-Type"] = contentType
+	
+	// 如果启用了事件触发，执行事件触发
+	if d.enableEvents && d.eventTrigger != nil {
+		fmt.Println("  [动态爬虫] 启动JavaScript事件触发...")
+		
+		// 触发事件
+		eventResult, err := d.eventTrigger.TriggerEvents(chromeCtx)
+		if err != nil {
+			fmt.Printf("  [事件触发] 执行出错: %v\n", err)
+		} else {
+			// 合并事件触发发现的URL和表单
+			if len(eventResult.NewURLsFound) > 0 {
+				fmt.Printf("  [事件触发] 发现 %d 个新URL\n", len(eventResult.NewURLsFound))
+				result.Links = append(result.Links, eventResult.NewURLsFound...)
+			}
+			
+			if len(eventResult.NewFormsFound) > 0 {
+				fmt.Printf("  [事件触发] 发现 %d 个新表单\n", len(eventResult.NewFormsFound))
+				result.Forms = append(result.Forms, eventResult.NewFormsFound...)
+			}
+			
+			// 可选：触发无限滚动
+			scrollCount, err := d.eventTrigger.TriggerInfiniteScroll(chromeCtx)
+			if err == nil && scrollCount > 0 {
+				fmt.Printf("  [事件触发] 执行了 %d 次滚动加载\n", scrollCount)
+				
+				// 滚动后重新提取链接
+				var newLinks []string
+				chromedp.Run(chromeCtx,
+					chromedp.Evaluate(`Array.from(document.querySelectorAll('a[href]')).map(a => a.href)`, &newLinks),
+				)
+				
+				// 合并新链接
+				for _, link := range newLinks {
+					found := false
+					for _, existing := range result.Links {
+						if existing == link {
+							found = true
+							break
+						}
+					}
+					if !found {
+						result.Links = append(result.Links, link)
+					}
+				}
+			}
+		}
 	}
 	
 	return result, nil
