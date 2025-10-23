@@ -1,0 +1,163 @@
+═══════════════════════════════════════════════════════════════
+  Spider Enhanced - POST请求爬虫使用示例
+═══════════════════════════════════════════════════════════════
+
+【1. 基本使用】
+---------------------------------
+.\spider_ultimate.exe -url "http://testphp.vulnweb.com" -depth 2
+
+
+【2. 输出文件说明】
+---------------------------------
+生成两个文件：
+
+1️⃣ spider_*_urls.txt - URL列表文件（包含POST请求）
+   格式：POST:URL | Body参数
+   
+   示例：
+   POST:http://testphp.vulnweb.com/search.php?test=query | searchFor=test
+   POST:http://testphp.vulnweb.com/userinfo.php | pass=Test%40123456&uname=%E5%BC%A0%E4%B8%89
+
+2️⃣ spider_*.txt - 详细报告文件
+   包含完整的参数列表、Content-Type、来源等
+
+
+【3. POST请求特性】
+---------------------------------
+✅ 自动发现页面中所有POST表单
+✅ 智能填充表单字段（20+种字段类型）
+✅ 自动过滤submit和button按钮参数
+✅ 强力去重（URL+Body双重去重）
+✅ URL编码的完整Body（可直接使用）
+
+
+【4. 发现的POST表单类型】
+---------------------------------
+🔍 搜索表单 - /search.php
+   参数：searchFor
+   
+🔐 登录表单 - /userinfo.php  
+   参数：uname, pass
+   
+💬 留言表单 - /guestbook.php
+   参数：name, text
+   
+🛒 购物车表单 - /cart.php
+   参数：price, addcart
+
+
+【5. 直接用于安全测试】
+---------------------------------
+
+方法1：sqlmap SQL注入测试
+---------------------------------
+sqlmap -u "http://testphp.vulnweb.com/search.php?test=query" \
+       --data="searchFor=test" \
+       --batch --risk=3 --level=5
+
+sqlmap -u "http://testphp.vulnweb.com/userinfo.php" \
+       --data="pass=Test%40123456&uname=%E5%BC%A0%E4%B8%89" \
+       --batch
+
+
+方法2：Burp Suite测试
+---------------------------------
+1. 打开Burp Suite Repeater
+2. 复制POST请求行：
+   POST:http://testphp.vulnweb.com/search.php?test=query | searchFor=test
+   
+3. 分离为：
+   POST /search.php?test=query HTTP/1.1
+   Host: testphp.vulnweb.com
+   Content-Type: application/x-www-form-urlencoded
+   
+   searchFor=test
+   
+4. 点击Send测试
+
+
+方法3：Python脚本批量测试
+---------------------------------
+import requests
+
+# 读取URL文件
+with open('spider_*_urls.txt', 'r', encoding='utf-8') as f:
+    for line in f:
+        if line.startswith('POST:'):
+            # 解析格式
+            parts = line.replace('POST:', '').split(' | ')
+            if len(parts) == 2:
+                url = parts[0].strip()
+                body = parts[1].strip()
+                
+                # 发送POST请求
+                print(f"Testing: {url}")
+                try:
+                    resp = requests.post(url, data=body, timeout=10)
+                    print(f"  Status: {resp.status_code}")
+                except Exception as e:
+                    print(f"  Error: {e}")
+
+
+方法4：curl命令行测试
+---------------------------------
+curl -X POST "http://testphp.vulnweb.com/search.php?test=query" \
+     -d "searchFor=test" \
+     -H "Content-Type: application/x-www-form-urlencoded"
+
+curl -X POST "http://testphp.vulnweb.com/userinfo.php" \
+     -d "pass=Test@123456&uname=张三" \
+     -H "Content-Type: application/x-www-form-urlencoded"
+
+
+【6. 参数说明】
+---------------------------------
+URL编码说明：
+  %40 = @
+  %E5%BC%A0%E4%B8%89 = 张三（UTF-8编码）
+  + = 空格
+
+可直接使用，无需解码！
+
+
+【7. 高级功能】
+---------------------------------
+✨ POST参数变体生成（已集成，未来版本可开启）
+   - SQL注入Payload
+   - XSS Payload  
+   - 参数污染测试
+   - 空值/数组测试
+
+🔒 敏感字段保护
+   - password字段自动隐藏为 ******
+   - token、secret等敏感字段保护
+
+
+【8. 常见问题】
+---------------------------------
+Q: 为什么有些表单没有被提取？
+A: 可能是JavaScript动态生成的表单，建议增加-depth参数
+
+Q: POST参数为什么是URL编码的？
+A: 这是标准的application/x-www-form-urlencoded格式，
+   所有安全工具都支持，可直接使用
+
+Q: 如何测试文件上传表单？
+A: 文件上传（multipart/form-data）需要特殊处理，
+   当前版本会标记Content-Type，后续版本会增强支持
+
+
+【9. 最佳实践】
+---------------------------------
+✅ 推荐深度：-depth 2 或 3
+✅ 配合隐藏路径发现使用
+✅ 结合技术栈识别调整测试策略
+✅ 注意敏感信息提示，避免误操作
+
+
+═══════════════════════════════════════════════════════════════
+版本：Spider Enhanced v2.3 (POST优化版)
+更新：2025-10-23
+状态：✅ 生产就绪
+═══════════════════════════════════════════════════════════════
+

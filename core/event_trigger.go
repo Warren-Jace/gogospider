@@ -28,15 +28,18 @@ type EventTriggerResult struct {
 // NewEventTrigger 创建事件触发器
 func NewEventTrigger() *EventTrigger {
 	return &EventTrigger{
-		triggerInterval:  100 * time.Millisecond, // 默认100ms间隔
-		waitAfterTrigger: 500 * time.Millisecond, // 触发后等待500ms
-		maxEvents:        100,                     // 最多触发100个事件
+		triggerInterval:  50 * time.Millisecond,  // 优化：减少到50ms间隔
+		waitAfterTrigger: 800 * time.Millisecond, // 增加到800ms，确保AJAX完成
+		maxEvents:        200,                     // 增加到200个事件
 		enabledEvents: []string{
 			"click",
 			"mouseover",
 			"mouseenter",
 			"focus",
 			"change",
+			"input",      // 新增：输入事件
+			"mousedown",  // 新增：鼠标按下
+			"dblclick",   // 新增：双击事件
 		},
 	}
 }

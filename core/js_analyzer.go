@@ -64,7 +64,7 @@ func (j *JSAnalyzer) extractAPIs(jsContent string) []string {
 		for _, match := range matches {
 			if len(match) > 1 {
 				api := strings.Trim(match[1], `"'`)
-				if !contains(apis, api) {
+				if !containsString(apis, api) {
 					apis = append(apis, api)
 				}
 			}
@@ -94,7 +94,7 @@ func (j *JSAnalyzer) extractParams(jsContent string) []string {
 			if len(match) > 1 {
 				param := match[1]
 				// 过滤掉一些常见的非参数词汇
-				if !isCommonWord(param) && !contains(params, param) {
+				if !isCommonWord(param) && !containsString(params, param) {
 					params = append(params, param)
 				}
 			}
@@ -123,7 +123,7 @@ func (j *JSAnalyzer) extractLinks(jsContent string) []string {
 			if len(match) > 1 {
 				link := strings.Trim(match[1], `"'`)
 				// 验证是否为有效链接
-				if isValidLink(link) && !contains(links, link) {
+				if isValidLink(link) && !containsString(links, link) {
 					links = append(links, link)
 				}
 			}
@@ -131,16 +131,6 @@ func (j *JSAnalyzer) extractLinks(jsContent string) []string {
 	}
 	
 	return links
-}
-
-// contains 检查slice中是否包含指定元素
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // isCommonWord 检查是否为常见词汇（非参数）
@@ -175,7 +165,7 @@ func isValidLink(link string) bool {
 	return true
 }
 
-// ExtractRelativeURLs 从跨域JS中提取相对路径URL，并拼接为完整URL
+// ExtractRelativeURLs 从跨域JS中提取相对路径URL，并拼接为完整URL（增强版）
 func (j *JSAnalyzer) ExtractRelativeURLs(jsContent string) []string {
 	if j.targetDomain == "" {
 		return []string{}
@@ -326,6 +316,211 @@ func (j *JSAnalyzer) AnalyzeExternalJS(jsContent string, sourceURL string) map[s
 	
 	// 统计信息
 	result["total_findings"] = len(relativeURLs) + len(apis) + len(links)
+	
+	return result
+}
+
+// ExtractFromJSObjects 从JavaScript对象和配置中提取URL（Phase 3增强）
+func (j *JSAnalyzer) ExtractFromJSObjects(jsContent string) []string {
+	urls := make([]string, 0)
+	seen := make(map[string]bool)
+	
+	// 提取JSON配置对象中的URL
+	patterns := []string{
+		// 1. 配置对象
+		`config\s*[=:]\s*{[^}]*["']url["']\s*:\s*["']([^"']+)["']`,
+		`settings\s*[=:]\s*{[^}]*["']endpoint["']\s*:\s*["']([^"']+)["']`,
+		
+		// 2. API配置
+		`API_BASE\s*[=:]\s*["']([^"']+)["']`,
+		`BASE_URL\s*[=:]\s*["']([^"']+)["']`,
+		`ENDPOINT\s*[=:]\s*["']([^"']+)["']`,
+		
+		// 3. 路由配置
+		`routes\s*[=:]\s*\{([^}]+)\}`,
+		`path\s*:\s*["']([^"']+)["']`,
+		
+		// 4. 模板字符串中的URL
+		"[`][^`]*(/[a-zA-Z0-9/_\\-]+)[^`]*[`]",
+		
+		// 5. 动态URL构建
+		`['"](/\$\{[^}]+\}/[^'"]*)['"]`,
+	}
+	
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindAllStringSubmatch(jsContent, -1)
+		
+		for _, match := range matches {
+			if len(match) >= 2 {
+				urlPath := match[len(match)-1]
+				
+				// 清理和验证
+				urlPath = strings.TrimSpace(urlPath)
+				if urlPath != "" && !seen[urlPath] && j.isValidPath(urlPath) {
+					seen[urlPath] = true
+					
+					// 拼接完整URL
+					if strings.HasPrefix(urlPath, "/") {
+						scheme := "http://"
+						if strings.Contains(j.targetDomain, "https") {
+							scheme = "https://"
+						}
+						cleanDomain := strings.TrimPrefix(j.targetDomain, "http://")
+						cleanDomain = strings.TrimPrefix(cleanDomain, "https://")
+						fullURL := scheme + cleanDomain + urlPath
+						urls = append(urls, fullURL)
+					}
+				}
+			}
+		}
+	}
+	
+	return urls
+}
+
+// ExtractAjaxURLs 专门提取AJAX请求URL（Phase 3增强）
+func (j *JSAnalyzer) ExtractAjaxURLs(jsContent string) []string {
+	urls := make([]string, 0)
+	seen := make(map[string]bool)
+	
+	// AJAX特定模式
+	patterns := []string{
+		// XMLHttpRequest
+		`xhr\.open\s*\(\s*["'](GET|POST)["']\s*,\s*["']([^"']+)["']`,
+		`\.send\s*\(\s*["']([^"']+)["']`,
+		
+		// jQuery AJAX
+		`\$\.ajax\s*\(\s*{[^}]*url\s*:\s*["']([^"']+)["']`,
+		`\$\.getJSON\s*\(\s*["']([^"']+)["']`,
+		
+		// Fetch API
+		`fetch\s*\(\s*["']([^"']+)["']`,
+		
+		// Axios
+		`axios\s*\.\s*(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']`,
+		`axios\s*\(\s*{[^}]*url\s*:\s*["']([^"']+)["']`,
+	}
+	
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindAllStringSubmatch(jsContent, -1)
+		
+		for _, match := range matches {
+			if len(match) >= 2 {
+				// 获取URL（可能在不同位置）
+				urlPath := ""
+				for i := len(match) - 1; i >= 1; i-- {
+					if strings.Contains(match[i], "/") || strings.Contains(match[i], "http") {
+						urlPath = match[i]
+						break
+					}
+				}
+				
+				if urlPath != "" && !seen[urlPath] {
+					seen[urlPath] = true
+					
+					// 处理相对路径
+					if strings.HasPrefix(urlPath, "/") && j.targetDomain != "" {
+						scheme := "http://"
+						if strings.Contains(j.targetDomain, "https") {
+							scheme = "https://"
+						}
+						cleanDomain := strings.TrimPrefix(j.targetDomain, "http://")
+						cleanDomain = strings.TrimPrefix(cleanDomain, "https://")
+						urlPath = scheme + cleanDomain + urlPath
+					}
+					
+					urls = append(urls, urlPath)
+				}
+			}
+		}
+	}
+	
+	return urls
+}
+
+// AnalyzeRouterConfig 分析前端路由配置（Phase 3增强）
+func (j *JSAnalyzer) AnalyzeRouterConfig(jsContent string) []string {
+	urls := make([]string, 0)
+	seen := make(map[string]bool)
+	
+	// 路由配置模式
+	patterns := []string{
+		// Vue Router
+		`path\s*:\s*["']([^"']+)["']`,
+		`route\s*:\s*["']([^"']+)["']`,
+		
+		// React Router
+		`<Route\s+path\s*=\s*["']([^"']+)["']`,
+		
+		// Angular Router
+		`{[^}]*path\s*:\s*["']([^"']+)["'][^}]*}`,
+		
+		// 通用路由数组
+		`routes\s*[=:]\s*\[([\s\S]*?)\]`,
+	}
+	
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindAllStringSubmatch(jsContent, -1)
+		
+		for _, match := range matches {
+			if len(match) >= 2 {
+				path := match[1]
+				
+				// 清理路由参数
+				path = regexp.MustCompile(`:\w+`).ReplaceAllString(path, "1")
+				path = regexp.MustCompile(`\*`).ReplaceAllString(path, "")
+				
+				if path != "" && !seen[path] {
+					seen[path] = true
+					
+					// 确保以/开头
+					if !strings.HasPrefix(path, "/") {
+						path = "/" + path
+					}
+					
+					// 拼接完整URL
+					if j.targetDomain != "" {
+						scheme := "http://"
+						if strings.Contains(j.targetDomain, "https") {
+							scheme = "https://"
+						}
+						cleanDomain := strings.TrimPrefix(j.targetDomain, "http://")
+						cleanDomain = strings.TrimPrefix(cleanDomain, "https://")
+						fullURL := scheme + cleanDomain + path
+						urls = append(urls, fullURL)
+					}
+				}
+			}
+		}
+	}
+	
+	return urls
+}
+
+// EnhancedAnalyze 增强的综合分析（Phase 3集成方法）
+func (j *JSAnalyzer) EnhancedAnalyze(jsContent string) map[string][]string {
+	result := make(map[string][]string)
+	
+	// 基础分析
+	apis, params, links := j.Analyze(jsContent)
+	result["basic_apis"] = apis
+	result["basic_params"] = params
+	result["basic_links"] = links
+	
+	// 相对URL提取
+	result["relative_urls"] = j.ExtractRelativeURLs(jsContent)
+	
+	// JavaScript对象中的URL
+	result["object_urls"] = j.ExtractFromJSObjects(jsContent)
+	
+	// AJAX URL
+	result["ajax_urls"] = j.ExtractAjaxURLs(jsContent)
+	
+	// 路由配置
+	result["router_urls"] = j.AnalyzeRouterConfig(jsContent)
 	
 	return result
 }

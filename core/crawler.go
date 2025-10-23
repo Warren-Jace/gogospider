@@ -15,9 +15,28 @@ type Result struct {
 	Forms       []Form
 	APIs        []string
 	
+	// POST请求数据
+	POSTRequests []POSTRequest // POST请求列表（包含完整参数）
+	
 	// 用于高级检测
 	HTMLContent string            // HTML内容（用于技术栈和敏感信息检测）
 	Headers     map[string]string // HTTP响应头
+	
+	// DOM相似度检测
+	IsSimilar    bool   // 是否与已爬取的页面相似
+	SimilarToURL string // 相似的页面URL
+}
+
+// POSTRequest POST请求数据
+type POSTRequest struct {
+	URL          string            // POST请求的URL
+	Method       string            // 请求方法（POST/PUT/PATCH等）
+	Parameters   map[string]string // POST参数（key-value）
+	Body         string            // 完整的请求体
+	ContentType  string            // Content-Type（application/x-www-form-urlencoded, multipart/form-data等）
+	Response     *POSTResponse     // POST请求的响应（如果已提交）
+	FromForm     bool              // 是否来自表单
+	FormAction   string            // 原始表单action
 }
 
 // Form 表单信息
@@ -33,6 +52,15 @@ type FormField struct {
 	Type     string
 	Value    string
 	Required bool
+}
+
+// POSTResponse POST请求的响应
+type POSTResponse struct {
+	StatusCode  int               // 响应状态码
+	Headers     map[string]string // 响应头
+	Body        string            // 响应体
+	NewURLs     []string          // 从响应中发现的新URL
+	RedirectURL string            // 重定向URL（如果有）
 }
 
 // Crawler 爬虫接口

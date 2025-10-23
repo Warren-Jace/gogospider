@@ -1,13 +1,20 @@
 {
   "TargetURL": "http://testphp.vulnweb.com/",
   "DepthSettings": {
-    "MaxDepth": 3,
+    "MaxDepth": 5,
     "SchedulingAlgorithm": "BFS",
-    "DeepCrawling": false
+    "DeepCrawling": true
+  },
+  "StrategySettings": {
+    "EnableStaticCrawler": true,
+    "EnableDynamicCrawler": true,
+    "EnableJSAnalysis": true,
+    "EnableAPIInference": true,
+    "DomainScope": "testphp.vulnweb.com"
   },
   "DeduplicationSettings": {
     "EnableURLPatternRecognition": true,
     "EnableDOMDeduplication": true,
-    "SimilarityThreshold": 0.9
+    "SimilarityThreshold": 0.85
   }
 }

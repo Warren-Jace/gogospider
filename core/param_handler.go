@@ -140,7 +140,7 @@ func (p *ParamHandler) ExtractPathPatterns(urls []string) []string {
 		segments := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
 		for _, segment := range segments {
 			// 如果段看起来像ID（数字），则归类为参数化段
-			if isNumeric(segment) {
+			if isNumericString(segment) {
 				pathSegments["{id}"]++
 			} else {
 				pathSegments[segment]++
@@ -155,16 +155,6 @@ func (p *ParamHandler) ExtractPathPatterns(urls []string) []string {
 	}
 	
 	return patterns
-}
-
-// isNumeric 检查字符串是否为数字
-func isNumeric(s string) bool {
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 // ExtractParams 从URL中提取参数
@@ -237,23 +227,9 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 		}
 	}
 	
-	// 3. HPP (HTTP Parameter Pollution) 变体
-	// 对于每个现有参数，添加重复参数的变体
-	for paramName, paramValues := range params {
-		if len(paramValues) > 0 {
-			// 创建一个有重复参数的变体
-			newParams := url.Values{}
-			for k, v := range params {
-				newParams[k] = v
-			}
-			// 添加重复参数
-			newParams.Add(paramName, "duplicate_value")
-			
-			newURL := *parsedURL
-			newURL.RawQuery = newParams.Encode()
-			variations = append(variations, newURL.String())
-		}
-	}
+	// === 移除：HPP (HTTP Parameter Pollution) 变体 ===
+	// HTTP参数污染测试属于攻击性测试，不适合纯爬虫工具
+	// 如需测试，请使用专业的安全测试工具
 	
 	// 4. 特定于目标站点的参数变体
 	// cart.php 相关参数
@@ -547,90 +523,16 @@ func (ph *ParamHandler) AnalyzeParameterSecurity(paramName string) (string, int)
 }
 
 // GenerateSecurityTestVariations 生成安全测试参数变体
+// ⚠️ 已弃用：作为纯爬虫工具，不应包含攻击性payload
+// 该函数保留但不再被调用，如需安全测试请使用专业工具（sqlmap、Burp等）
 func (ph *ParamHandler) GenerateSecurityTestVariations(baseURL string) []string {
-	variations := make([]string, 0)
-	
-	parsedURL, err := url.Parse(baseURL)
-	if err != nil {
-		return variations
-	}
-	
-	params := parsedURL.Query()
-	
-	// 添加原始URL
-	variations = append(variations, baseURL)
-	
-	// 为每个参数生成安全测试变体
-	for paramName, paramValues := range params {
-		if len(paramValues) > 0 {
-			// SQL注入测试变体
-			sqlPayloads := []string{"'", "\"", "1' OR '1'='1", "1\" OR \"1\"=\"1", "'; DROP TABLE users; --"}
-			for _, payload := range sqlPayloads {
-				newParams := url.Values{}
-				for k, v := range params {
-					newParams[k] = v
-				}
-				newParams.Set(paramName, payload)
-				newURL := *parsedURL
-				newURL.RawQuery = newParams.Encode()
-				variations = append(variations, newURL.String())
-			}
-			
-			// XSS测试变体
-			xssPayloads := []string{"<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "javascript:alert(1)"}
-			for _, payload := range xssPayloads {
-				newParams := url.Values{}
-				for k, v := range params {
-					newParams[k] = v
-				}
-				newParams.Set(paramName, payload)
-				newURL := *parsedURL
-				newURL.RawQuery = newParams.Encode()
-				variations = append(variations, newURL.String())
-			}
-			
-			// 文件包含测试变体
-			lfiPayloads := []string{"../../../etc/passwd", "..\\..\\..\\windows\\system32\\drivers\\etc\\hosts", "/etc/passwd", "C:\\Windows\\System32\\drivers\\etc\\hosts"}
-			for _, payload := range lfiPayloads {
-				newParams := url.Values{}
-				for k, v := range params {
-					newParams[k] = v
-				}
-				newParams.Set(paramName, payload)
-				newURL := *parsedURL
-				newURL.RawQuery = newParams.Encode()
-				variations = append(variations, newURL.String())
-			}
-			
-			// 命令注入测试变体
-			cmdPayloads := []string{"; ls", "| whoami", "&& dir", "$(id)", "`whoami`"}
-			for _, payload := range cmdPayloads {
-				newParams := url.Values{}
-				for k, v := range params {
-					newParams[k] = v
-				}
-				newParams.Set(paramName, paramValues[0]+payload)
-				newURL := *parsedURL
-				newURL.RawQuery = newParams.Encode()
-				variations = append(variations, newURL.String())
-			}
-		}
-	}
-	
-	// 添加常见的隐藏参数测试
-	hiddenParams := []string{"debug", "test", "admin", "dev", "backup", "config", "internal"}
-	for _, hiddenParam := range hiddenParams {
-		newParams := url.Values{}
-		for k, v := range params {
-			newParams[k] = v
-		}
-		newParams.Set(hiddenParam, "1")
-		newURL := *parsedURL
-		newURL.RawQuery = newParams.Encode()
-		variations = append(variations, newURL.String())
-	}
-	
-	return variations
+	// 作为纯爬虫工具，返回空列表
+	// 如需安全测试，请使用：
+	// - sqlmap: SQL注入检测
+	// - Burp Suite: 综合漏洞扫描
+	// - XSStrike: XSS检测
+	// - Nuclei: 漏洞扫描框架
+	return []string{}
 }
 
 // GenerateParameterFuzzList 生成参数模糊测试列表
@@ -719,4 +621,223 @@ func isJavaScriptKeyword(word string) bool {
 	
 	_, isKeyword := keywords[strings.ToLower(word)]
 	return isKeyword
+}
+
+// GeneratePOSTVariations 生成POST请求参数变体（用于爬虫测试，不含攻击payload）
+// ⚠️ 已修改：移除了所有攻击性payload，只保留正常的参数变体
+func (ph *ParamHandler) GeneratePOSTVariations(postReq POSTRequest) []POSTRequest {
+	variations := make([]POSTRequest, 0)
+	
+	// 添加原始请求
+	variations = append(variations, postReq)
+	
+	// 如果没有参数，返回空变体，让调用者决定是否进行爆破
+	if len(postReq.Parameters) == 0 {
+		return variations
+	}
+	
+	// === 移除：SQL注入、XSS、命令注入等攻击性payload ===
+	// 作为纯爬虫工具，不应包含攻击性测试
+	// 如需安全测试，请导出URL和表单后使用专业工具
+	
+	// === 保留：正常的参数变体（用于爬虫测试） ===
+	
+	// 1. 参数值变化（使用正常值）
+	normalValues := []string{"1", "2", "test", "admin", "true", "false"}
+	for paramName := range postReq.Parameters {
+		for _, value := range normalValues {
+			newReq := ph.clonePOSTRequest(postReq)
+			newReq.Parameters[paramName] = value
+			newReq.Body = ph.buildPOSTBody(newReq.Parameters)
+			variations = append(variations, newReq)
+		}
+	}
+	
+	// 2. 空值测试（正常的边界测试）
+	for paramName := range postReq.Parameters {
+		newReq := ph.clonePOSTRequest(postReq)
+		newReq.Parameters[paramName] = ""
+		newReq.Body = ph.buildPOSTBody(newReq.Parameters)
+		variations = append(variations, newReq)
+	}
+	
+	// 3. 数组参数测试（正常的格式测试）
+	for paramName, paramValue := range postReq.Parameters {
+		newReq := ph.clonePOSTRequest(postReq)
+		newReq.Parameters[paramName+"[]"] = paramValue
+		delete(newReq.Parameters, paramName)
+		newReq.Body = ph.buildPOSTBody(newReq.Parameters)
+		variations = append(variations, newReq)
+	}
+	
+	return variations
+}
+
+// ExtractPOSTParameters 从POSTRequest中提取参数信息（用于分析）
+func (ph *ParamHandler) ExtractPOSTParameters(postReq POSTRequest) []map[string]interface{} {
+	params := make([]map[string]interface{}, 0)
+	
+	for name, value := range postReq.Parameters {
+		paramInfo := map[string]interface{}{
+			"name":          name,
+			"value":         value,
+			"value_length":  len(value),
+			"from_form":     postReq.FromForm,
+		}
+		
+		// 安全分析
+		risk, level := ph.AnalyzeParameterSecurity(name)
+		paramInfo["security_risk"] = risk
+		paramInfo["risk_level"] = level
+		
+		// 值类型分析
+		if _, err := strconv.Atoi(value); err == nil {
+			paramInfo["value_type"] = "number"
+		} else if matched, _ := regexp.MatchString(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`, value); matched {
+			paramInfo["value_type"] = "email"
+		} else if matched, _ := regexp.MatchString(`^https?://`, value); matched {
+			paramInfo["value_type"] = "url"
+		} else {
+			paramInfo["value_type"] = "text"
+		}
+		
+		params = append(params, paramInfo)
+	}
+	
+	return params
+}
+
+// clonePOSTRequest 克隆POST请求
+func (ph *ParamHandler) clonePOSTRequest(req POSTRequest) POSTRequest {
+	newReq := POSTRequest{
+		URL:         req.URL,
+		Method:      req.Method,
+		Parameters:  make(map[string]string),
+		Body:        req.Body,
+		ContentType: req.ContentType,
+		FromForm:    req.FromForm,
+		FormAction:  req.FormAction,
+	}
+	
+	// 深拷贝参数
+	for k, v := range req.Parameters {
+		newReq.Parameters[k] = v
+	}
+	
+	return newReq
+}
+
+// buildPOSTBody 构建POST请求体
+func (ph *ParamHandler) buildPOSTBody(parameters map[string]string) string {
+	values := url.Values{}
+	for key, value := range parameters {
+		values.Add(key, value)
+	}
+	return values.Encode()
+}
+
+// GeneratePOSTParameterFuzzList 生成POST参数爆破列表（用于无参数表单）
+func (ph *ParamHandler) GeneratePOSTParameterFuzzList(baseURL string) []POSTRequest {
+	fuzzList := make([]POSTRequest, 0)
+	
+	// 常见POST参数组合（按场景分类）
+	postParamCombinations := []map[string]string{
+		// === 认证/登录场景 ===
+		{"username": "admin", "password": "admin123"},
+		{"username": "test", "password": "test123"},
+		{"user": "admin", "pass": "admin123"},
+		{"email": "admin@test.com", "password": "admin123"},
+		{"login": "admin", "pwd": "admin123"},
+		{"account": "admin", "password": "admin123"},
+		{"uname": "admin", "upass": "admin123"},
+		
+		// === 用户信息场景 ===
+		{"username": "testuser", "email": "test@example.com", "password": "Test@123"},
+		{"name": "Test User", "email": "test@example.com", "phone": "13800138000"},
+		{"firstname": "Test", "lastname": "User", "email": "test@example.com"},
+		
+		// === 搜索场景 ===
+		{"search": "test", "q": "admin"},
+		{"query": "test", "type": "all"},
+		{"keyword": "admin", "category": "1"},
+		{"s": "test"},
+		
+		// === 数据操作场景 ===
+		{"id": "1", "action": "update"},
+		{"id": "1", "action": "delete"},
+		{"userid": "1", "operation": "edit"},
+		{"item_id": "1", "quantity": "1"},
+		
+		// === 文件操作场景 ===
+		{"file": "test.txt", "action": "read"},
+		{"filename": "../../../etc/passwd"},
+		{"path": "/tmp/test"},
+		{"upload": "test.php"},
+		
+		// === 评论/留言场景 ===
+		{"comment": "test comment", "author": "Test User"},
+		{"message": "test message", "name": "Test"},
+		{"content": "test content", "title": "Test Title"},
+		{"text": "test text", "user": "admin"},
+		
+		// === API测试场景 ===
+		{"api_key": "test123", "action": "list"},
+		{"token": "abc123def456", "method": "get"},
+		{"auth": "Bearer test123", "resource": "users"},
+		{"key": "test", "secret": "secret123"},
+		
+		// === 系统/调试场景 ===
+		{"debug": "1", "show_errors": "1"},
+		{"test": "1", "verbose": "1"},
+		{"dev": "1", "trace": "1"},
+		{"admin": "1", "mode": "debug"},
+		
+		// === 单参数测试 ===
+		{"id": "1"},
+		{"page": "1"},
+		{"user": "admin"},
+		{"action": "test"},
+		{"cmd": "whoami"},
+		{"file": "index.php"},
+		{"data": "test"},
+		{"value": "1"},
+		{"key": "test"},
+		{"token": "abc123"},
+		{"session": "test123"},
+		{"redirect": "/admin"},
+		{"url": "http://evil.com"},
+		{"callback": "alert(1)"},
+		
+		// === 常见字段名组合 ===
+		{"username": "admin"},
+		{"password": "admin123"},
+		{"email": "test@example.com"},
+		{"name": "Test"},
+		{"phone": "13800138000"},
+		{"address": "Test Address"},
+		{"title": "Test Title"},
+		{"description": "Test Description"},
+		{"content": "Test Content"},
+		{"message": "Test Message"},
+		{"comment": "Test Comment"},
+	}
+	
+	// 为每个参数组合生成POST请求
+	for _, params := range postParamCombinations {
+		body := ph.buildPOSTBody(params)
+		
+		postReq := POSTRequest{
+			URL:         baseURL,
+			Method:      "POST",
+			Parameters:  params,
+			Body:        body,
+			ContentType: "application/x-www-form-urlencoded",
+			FromForm:    false,
+			FormAction:  baseURL,
+		}
+		
+		fuzzList = append(fuzzList, postReq)
+	}
+	
+	return fuzzList
 }

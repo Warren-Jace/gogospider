@@ -404,7 +404,21 @@ func (hpd *HiddenPathDiscovery) resolveURL(relativePath string) string {
 		return relativePath
 	}
 	
-	baseURL := strings.TrimSuffix(hpd.baseURL, "/")
+	// 解析baseURL，提取scheme和host
+	parsedBase, err := url.Parse(hpd.baseURL)
+	if err != nil {
+		// 如果解析失败，使用简单拼接（向后兼容）
+		baseURL := strings.TrimSuffix(hpd.baseURL, "/")
+		if !strings.HasPrefix(relativePath, "/") {
+			relativePath = "/" + relativePath
+		}
+		return baseURL + relativePath
+	}
+	
+	// 使用scheme和host构建基础URL
+	baseURL := parsedBase.Scheme + "://" + parsedBase.Host
+	
+	// 确保relativePath以/开头
 	if !strings.HasPrefix(relativePath, "/") {
 		relativePath = "/" + relativePath
 	}

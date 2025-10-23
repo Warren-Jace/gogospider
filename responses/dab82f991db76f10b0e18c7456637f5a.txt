@@ -1,0 +1,1 @@
+<items><item name="infocateg" id="1">Posters</item><item name="infocateg" id="2">Paintings</item><item name="infocateg" id="3">Stickers</item><item name="infocateg" id="4">Graffity</item></items>

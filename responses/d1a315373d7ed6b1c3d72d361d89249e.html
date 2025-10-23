@@ -1,0 +1,6 @@
+<title>HTTP Parameter Pollution Example</title>
+
+<a href="?pp=12">check</a><br/>
+<a href="params.php?p=valid&pp=12">link1</a><br/><a href="params.php?p=valid&pp=12">link2</a><br/><form action="params.php?p=valid&pp=12"><input type=submit name=aaaa/></form><br/>
+<hr>
+<a href='http://blog.mindedsecurity.com/2009/05/client-side-http-parameter-pollution.html'>Original article</a>
