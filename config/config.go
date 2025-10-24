@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -126,4 +127,84 @@ func NewDefaultConfig() *Config {
 			EnableURLPatternRecognition: true,  // 启用URL模式识别
 		},
 	}
+}
+
+// Validate 验证配置（优化：添加配置验证）
+func (c *Config) Validate() error {
+	// 验证目标URL
+	if c.TargetURL == "" {
+		return fmt.Errorf("目标URL不能为空")
+	}
+	
+	// 验证深度设置
+	if c.DepthSettings.MaxDepth < 0 {
+		return fmt.Errorf("最大深度不能为负数，当前值: %d", c.DepthSettings.MaxDepth)
+	}
+	
+	if c.DepthSettings.MaxDepth > 20 {
+		return fmt.Errorf("最大深度不能超过20层（防止过度爬取），当前值: %d", c.DepthSettings.MaxDepth)
+	}
+	
+	if c.DepthSettings.SchedulingAlgorithm != "BFS" && c.DepthSettings.SchedulingAlgorithm != "DFS" {
+		return fmt.Errorf("调度算法必须是 BFS 或 DFS，当前值: %s", c.DepthSettings.SchedulingAlgorithm)
+	}
+	
+	// 验证策略设置
+	if c.StrategySettings.ParamFuzzLimit < 0 {
+		return fmt.Errorf("参数爆破限制不能为负数，当前值: %d", c.StrategySettings.ParamFuzzLimit)
+	}
+	
+	if c.StrategySettings.POSTParamFuzzLimit < 0 {
+		return fmt.Errorf("POST参数爆破限制不能为负数，当前值: %d", c.StrategySettings.POSTParamFuzzLimit)
+	}
+	
+	// 验证反爬设置
+	if c.AntiDetectionSettings.RequestDelay < 0 {
+		return fmt.Errorf("请求延迟不能为负数，当前值: %v", c.AntiDetectionSettings.RequestDelay)
+	}
+	
+	if len(c.AntiDetectionSettings.UserAgents) == 0 {
+		return fmt.Errorf("至少需要配置一个User-Agent")
+	}
+	
+	// 验证去重设置
+	if c.DeduplicationSettings.SimilarityThreshold < 0 || c.DeduplicationSettings.SimilarityThreshold > 1 {
+		return fmt.Errorf("相似度阈值必须在0-1之间，当前值: %.2f", c.DeduplicationSettings.SimilarityThreshold)
+	}
+	
+	return nil
+}
+
+// ValidateAndFix 验证并修复配置（自动修复一些常见问题）
+func (c *Config) ValidateAndFix() error {
+	// 修复深度
+	if c.DepthSettings.MaxDepth < 0 {
+		c.DepthSettings.MaxDepth = 1
+	}
+	if c.DepthSettings.MaxDepth > 20 {
+		c.DepthSettings.MaxDepth = 20
+	}
+	
+	// 修复调度算法
+	if c.DepthSettings.SchedulingAlgorithm != "BFS" && c.DepthSettings.SchedulingAlgorithm != "DFS" {
+		c.DepthSettings.SchedulingAlgorithm = "BFS"
+	}
+	
+	// 修复相似度阈值
+	if c.DeduplicationSettings.SimilarityThreshold < 0 {
+		c.DeduplicationSettings.SimilarityThreshold = 0
+	}
+	if c.DeduplicationSettings.SimilarityThreshold > 1 {
+		c.DeduplicationSettings.SimilarityThreshold = 1
+	}
+	
+	// 修复User-Agent
+	if len(c.AntiDetectionSettings.UserAgents) == 0 {
+		c.AntiDetectionSettings.UserAgents = []string{
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		}
+	}
+	
+	// 再次验证
+	return c.Validate()
 }

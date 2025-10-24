@@ -14,8 +14,6 @@ import (
 // DynamicCrawlerImpl 动态爬虫实现
 type DynamicCrawlerImpl struct {
 	config          *config.Config
-	ctx             context.Context
-	cancel          context.CancelFunc
 	timeout         time.Duration
 	eventTrigger    *EventTrigger    // 事件触发器
 	ajaxInterceptor *AjaxInterceptor // AJAX拦截器
@@ -25,13 +23,8 @@ type DynamicCrawlerImpl struct {
 
 // NewDynamicCrawler 创建动态爬虫实例
 func NewDynamicCrawler() *DynamicCrawlerImpl {
-	// 创建带有超时的上下文（增加超时时间到180秒 - 3分钟）
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
-	
 	return &DynamicCrawlerImpl{
-		ctx:             ctx,
-		cancel:          cancel,
-		timeout:         180 * time.Second, // 增加到180秒（3分钟）
+		timeout:         180 * time.Second, // 每个请求180秒超时（3分钟）
 		eventTrigger:    NewEventTrigger(),
 		ajaxInterceptor: nil, // 将在Crawl方法中根据目标域名创建
 		enableEvents:    true, // 默认启用事件触发
@@ -59,8 +52,8 @@ func (d *DynamicCrawlerImpl) Configure(config *config.Config) {
 
 // Crawl 执行动态爬取
 func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
-	// 创建新的上下文用于此次爬取
-	ctx, cancel := context.WithTimeout(d.ctx, d.timeout)
+	// 为每次爬取创建独立的上下文（优化：避免共享context超时问题）
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
 	defer cancel()
 	
 	// 设置Chrome选项（全面优化：更稳定更快速的启动参数）
@@ -581,7 +574,7 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 
 // ExecuteJS 执行JavaScript
 func (d *DynamicCrawlerImpl) ExecuteJS(script string) (interface{}, error) {
-	ctx, cancel := context.WithTimeout(d.ctx, d.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
 	defer cancel()
 	
 	var result interface{}
@@ -860,9 +853,8 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 
 // Stop 停止爬取
 func (d *DynamicCrawlerImpl) Stop() {
-	if d.cancel != nil {
-		d.cancel()
-	}
+	// 不再需要 cancel，每个 Crawl 都有自己的 context
+	// 这里可以添加其他清理逻辑
 }
 
 // getString 从map中安全获取字符串值

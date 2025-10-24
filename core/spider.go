@@ -52,6 +52,12 @@ type Spider struct {
 	mutex              sync.Mutex
 	targetDomain       string          // 目标域名
 	visitedURLs        map[string]bool // 已访问URL
+	
+	// 资源管理（优化：防止泄漏）
+	done               chan struct{}   // 完成信号
+	wg                 sync.WaitGroup  // 等待所有goroutine完成
+	closed             bool            // 是否已关闭
+	closeMux           sync.Mutex      // 关闭锁
 }
 
 // NewSpider 创建爬虫实例
@@ -105,6 +111,10 @@ func NewSpider(cfg *config.Config) *Spider {
 		sitemapURLs:        make([]string, 0),
 		robotsURLs:         make([]string, 0),
 		visitedURLs:        make(map[string]bool),
+		
+		// 初始化资源管理
+		done:               make(chan struct{}),
+		closed:             false,
 	}
 	
 	// 配置各个组件
@@ -119,6 +129,9 @@ func NewSpider(cfg *config.Config) *Spider {
 
 // Start 开始爬取
 func (s *Spider) Start(targetURL string) error {
+	// 确保资源清理（优化：防止泄漏）
+	defer s.cleanup()
+	
 	// 解析目标URL并提取域名
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
@@ -231,13 +244,15 @@ func (s *Spider) Start(targetURL string) error {
 	// 处理发现的参数（包括GET参数爆破）
 	paramFuzzURLs := s.processParams(targetURL)
 	
-	// 将参数爆破生成的URL添加到第一个结果的Links中，以便递归爬取
+	// 将参数爆破生成的URL添加到第一个结果的Links中，以便递归爬取（优化：修复并发安全）
+	s.mutex.Lock()
 	if len(paramFuzzURLs) > 1 && len(s.results) > 0 {
-		s.mutex.Lock()
 		// 添加到第一个结果的Links中（作为发现的链接）
 		s.results[0].Links = append(s.results[0].Links, paramFuzzURLs...)
 		s.mutex.Unlock()
 		fmt.Printf("  [参数爆破] 已将 %d 个爆破URL添加到爬取队列\n", len(paramFuzzURLs))
+	} else {
+		s.mutex.Unlock()
 	}
 	
 	// 处理发现的表单（包括POST参数爆破）
@@ -1043,6 +1058,40 @@ func (s *Spider) Stop() {
 	if s.perfOptimizer != nil {
 		s.perfOptimizer.Close()
 	}
+}
+
+// Close 优雅关闭爬虫，释放所有资源（实现 io.Closer 接口）
+func (s *Spider) Close() error {
+	s.closeMux.Lock()
+	defer s.closeMux.Unlock()
+	
+	// 防止重复关闭
+	if s.closed {
+		return nil
+	}
+	
+	fmt.Println("\n正在关闭爬虫，清理资源...")
+	
+	// 停止爬取
+	s.Stop()
+	
+	// 等待所有 goroutine 完成
+	s.wg.Wait()
+	
+	// 关闭 done channel
+	close(s.done)
+	
+	// 标记为已关闭
+	s.closed = true
+	
+	fmt.Println("资源清理完成")
+	return nil
+}
+
+// cleanup 内部清理方法（在 Start 中使用 defer 调用）
+func (s *Spider) cleanup() {
+	// Close 方法已经处理了所有清理工作
+	s.Close()
 }
 
 // prioritizeURLs URL优先级排序（Phase 3新增）
