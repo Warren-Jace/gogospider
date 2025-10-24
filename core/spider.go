@@ -3,8 +3,11 @@ package core
 import (
 	"fmt"
 	"io"
+	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -58,10 +61,28 @@ type Spider struct {
 	wg                 sync.WaitGroup  // 等待所有goroutine完成
 	closed             bool            // 是否已关闭
 	closeMux           sync.Mutex      // 关闭锁
+	
+	// v2.6: 日志和监控
+	logger             Logger          // 结构化日志记录器
 }
 
 // NewSpider 创建爬虫实例
 func NewSpider(cfg *config.Config) *Spider {
+	// v2.6: 创建日志记录器
+	var logOutput io.Writer = os.Stdout
+	if cfg.LogSettings.OutputFile != "" {
+		file, err := os.OpenFile(cfg.LogSettings.OutputFile, 
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			log.Printf("无法打开日志文件 %s: %v，使用标准输出", cfg.LogSettings.OutputFile, err)
+		} else {
+			logOutput = file
+		}
+	}
+	
+	logLevel := parseLogLevel(cfg.LogSettings.Level)
+	logger := NewLogger(logLevel, logOutput)
+	
 	// 创建结果通道和停止通道
 	resultChan := make(chan Result, 100)
 	stopChan := make(chan struct{})
@@ -115,6 +136,9 @@ func NewSpider(cfg *config.Config) *Spider {
 		// 初始化资源管理
 		done:               make(chan struct{}),
 		closed:             false,
+		
+		// v2.6: 初始化日志
+		logger:             logger,
 	}
 	
 	// 配置各个组件
@@ -125,6 +149,22 @@ func NewSpider(cfg *config.Config) *Spider {
 	spider.jsAnalyzer.SetTargetDomain(cfg.TargetURL)
 	
 	return spider
+}
+
+// parseLogLevel 解析日志级别字符串为 slog.Level
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToUpper(level) {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "INFO":
+		return slog.LevelInfo
+	case "WARN", "WARNING":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // Start 开始爬取
@@ -155,9 +195,15 @@ func (s *Spider) Start(targetURL string) error {
 		return fmt.Errorf("URL已处理过: %s", targetURL)
 	}
 	
-	fmt.Printf("开始爬取URL: %s\n", targetURL)
-	fmt.Printf("限制域名范围: %s\n", s.targetDomain)
-	fmt.Printf("\n【已启用功能】Spider Enhanced v2.2\n")
+	// v2.6: 使用结构化日志
+	s.logger.Info("开始爬取",
+		"url", targetURL,
+		"target_domain", s.targetDomain,
+		"max_depth", s.config.DepthSettings.MaxDepth,
+		"version", "v2.6")
+	
+	// 显示功能清单（保留用户友好的格式）
+	fmt.Printf("\n【已启用功能】Spider Ultimate v2.6\n")
 	fmt.Printf("  ✓ 跨域JS分析（支持60+个CDN）\n")
 	fmt.Printf("  ✓ 智能表单填充（支持20+种字段类型）\n")
 	fmt.Printf("  ✓ 作用域精确控制（10个过滤维度）\n")
@@ -165,13 +211,15 @@ func (s *Spider) Start(targetURL string) error {
 	fmt.Printf("  ✓ 技术栈识别（15+种框架）\n")
 	fmt.Printf("  ✓ 敏感信息检测（30+种模式）\n")
 	fmt.Printf("  ✓ JavaScript事件触发（点击、悬停、输入、滚动）\n")
-	fmt.Printf("  ✓ AJAX请求拦截（动态URL捕获）🆕\n")
-	fmt.Printf("  ✓ 增强JS分析（对象、路由、配置）🆕\n")
-	fmt.Printf("  ✓ 静态资源分类（7种类型）🆕\n")
-	fmt.Printf("  ✓ IP地址检测（内网泄露识别）🆕\n")
-	fmt.Printf("  ✓ URL优先级排序（智能爬取策略）🆕\n")
+	fmt.Printf("  ✓ AJAX请求拦截（动态URL捕获）\n")
+	fmt.Printf("  ✓ 增强JS分析（对象、路由、配置）\n")
+	fmt.Printf("  ✓ 静态资源分类（7种类型）\n")
+	fmt.Printf("  ✓ IP地址检测（内网泄露识别）\n")
+	fmt.Printf("  ✓ URL优先级排序（智能爬取策略）\n")
+	fmt.Printf("  ✓ 结构化日志系统（分级、文件、JSON）🆕\n")
 	fmt.Printf("\n爬取配置:\n")
-	fmt.Printf("  深度: %d 层 | 并发: 20-30 | 最大URL: 500\n", s.config.DepthSettings.MaxDepth)
+	fmt.Printf("  深度: %d 层 | 并发: 20-30 | 日志: %s\n", 
+		s.config.DepthSettings.MaxDepth, s.config.LogSettings.Level)
 	fmt.Printf("\n")
 	
 	// 初始化隐藏路径发现器
@@ -182,22 +230,18 @@ func (s *Spider) Start(targetURL string) error {
 	s.hiddenPathDiscovery = NewHiddenPathDiscovery(targetURL, userAgent)
 	
 	// === 优化：先爬取sitemap.xml和robots.txt ===
-	fmt.Println("开始爬取sitemap.xml和robots.txt...")
+	s.logger.Info("开始爬取sitemap和robots.txt", "target", targetURL)
 	sitemapURLs, robotsInfo := s.sitemapCrawler.GetAllURLs(targetURL)
 	s.mutex.Lock()
 	s.sitemapURLs = sitemapURLs
 	s.robotsURLs = append(robotsInfo.DisallowPaths, robotsInfo.AllowPaths...)
 	s.mutex.Unlock()
 	
-	if len(sitemapURLs) > 0 {
-		fmt.Printf("  [Sitemap] 发现 %d 个URL\n", len(sitemapURLs))
-	}
-	if len(robotsInfo.DisallowPaths) > 0 {
-		fmt.Printf("  [robots.txt] 发现 %d 个Disallow路径（渗透测试重点）\n", len(robotsInfo.DisallowPaths))
-	}
-	if len(robotsInfo.SitemapURLs) > 0 {
-		fmt.Printf("  [robots.txt] 发现 %d 个额外sitemap\n", len(robotsInfo.SitemapURLs))
-	}
+	s.logger.Info("sitemap和robots.txt爬取完成",
+		"sitemap_urls", len(sitemapURLs),
+		"disallow_paths", len(robotsInfo.DisallowPaths),
+		"allow_paths", len(robotsInfo.AllowPaths),
+		"extra_sitemaps", len(robotsInfo.SitemapURLs))
 	
 	// 将sitemap和robots中的URL添加到待爬取列表
 	for _, u := range sitemapURLs {
@@ -208,36 +252,44 @@ func (s *Spider) Start(targetURL string) error {
 	}
 	
 	// 开始隐藏路径发现
-	fmt.Println("开始隐藏路径发现...")
+	s.logger.Info("开始扫描隐藏路径")
 	hiddenPaths := s.hiddenPathDiscovery.DiscoverAllHiddenPaths()
 	s.mutex.Lock()
 	s.hiddenPaths = append(s.hiddenPaths, hiddenPaths...)
 	s.mutex.Unlock()
-	fmt.Printf("发现 %d 个隐藏路径\n", len(hiddenPaths))
+	s.logger.Info("隐藏路径扫描完成", "count", len(hiddenPaths))
 	
 	// 根据配置决定使用哪种爬虫策略
 	if s.config.StrategySettings.EnableStaticCrawler {
-		fmt.Println("使用静态爬虫...")
+		s.logger.Info("使用静态爬虫", "url", targetURL)
 		result, err := s.staticCrawler.Crawl(parsedURL)
 		if err != nil {
-			fmt.Printf("静态爬虫错误: %v\n", err)
+			s.logger.Error("静态爬虫失败", "url", targetURL, "error", err)
 		} else {
 			s.addResult(result)
-			fmt.Printf("静态爬虫完成，发现 %d 个链接, %d 个资源, %d 个表单, %d 个API\n", 
-				len(result.Links), len(result.Assets), len(result.Forms), len(result.APIs))
+			s.logger.Info("静态爬虫完成",
+				"url", targetURL,
+				"links", len(result.Links),
+				"assets", len(result.Assets),
+				"forms", len(result.Forms),
+				"apis", len(result.APIs))
 		}
 	}
 	
 	// 如果启用了动态爬虫，总是使用（Phase 2/3优化：捕获AJAX和JS动态内容）
 	if s.config.StrategySettings.EnableDynamicCrawler {
-		fmt.Println("使用动态爬虫（捕获AJAX和动态JS内容）...")
+		s.logger.Info("使用动态爬虫", "url", targetURL, "mode", "ajax_intercept")
 		result, err := s.dynamicCrawler.Crawl(parsedURL)
 		if err != nil {
-			fmt.Printf("动态爬虫错误: %v\n", err)
+			s.logger.Error("动态爬虫失败", "url", targetURL, "error", err)
 		} else {
 			s.addResult(result)
-			fmt.Printf("动态爬虫完成，发现 %d 个链接, %d 个资源, %d 个表单, %d 个API\n", 
-				len(result.Links), len(result.Assets), len(result.Forms), len(result.APIs))
+			s.logger.Info("动态爬虫完成",
+				"url", targetURL,
+				"links", len(result.Links),
+				"assets", len(result.Assets),
+				"forms", len(result.Forms),
+				"apis", len(result.APIs))
 		}
 	}
 	
@@ -250,7 +302,7 @@ func (s *Spider) Start(targetURL string) error {
 		// 添加到第一个结果的Links中（作为发现的链接）
 		s.results[0].Links = append(s.results[0].Links, paramFuzzURLs...)
 		s.mutex.Unlock()
-		fmt.Printf("  [参数爆破] 已将 %d 个爆破URL添加到爬取队列\n", len(paramFuzzURLs))
+		s.logger.Info("参数爆破URL已添加到队列", "count", len(paramFuzzURLs))
 	} else {
 		s.mutex.Unlock()
 	}

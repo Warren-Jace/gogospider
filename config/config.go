@@ -21,6 +21,9 @@ type Config struct {
 	
 	// 去重设置
 	DeduplicationSettings DeduplicationSettings
+	
+	// 日志设置（v2.6 新增）
+	LogSettings LogSettings
 }
 
 // DepthSettings 爬取深度设置
@@ -92,6 +95,21 @@ type DeduplicationSettings struct {
 	EnableURLPatternRecognition bool
 }
 
+// LogSettings 日志设置（v2.6 新增）
+type LogSettings struct {
+	// 日志级别: DEBUG, INFO, WARN, ERROR
+	Level string
+	
+	// 日志文件路径，空表示 stdout
+	OutputFile string
+	
+	// 日志格式: json, text
+	Format string
+	
+	// 是否显示实时指标
+	ShowMetrics bool
+}
+
 // NewDefaultConfig 创建默认配置（优化版 - 超越crawlergo）
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -125,6 +143,12 @@ func NewDefaultConfig() *Config {
 			SimilarityThreshold:         0.85,  // 85%相似度阈值
 			EnableDOMDeduplication:      true,  // 启用DOM去重
 			EnableURLPatternRecognition: true,  // 启用URL模式识别
+		},
+		LogSettings: LogSettings{
+			Level:       "INFO",  // 默认INFO级别
+			OutputFile:  "",      // 默认输出到控制台
+			Format:      "json",  // 默认JSON格式
+			ShowMetrics: false,   // 默认不显示实时指标
 		},
 	}
 }

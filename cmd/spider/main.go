@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -33,6 +34,16 @@ var (
 	fuzzParams      string
 	fuzzDict        string
 	configFile      string
+	// v2.6 新增：日志和监控参数
+	logLevel        string
+	logFile         string
+	logFormat       string
+	showMetrics     bool
+	// v2.6 新增：易用性参数（借鉴竞品）
+	useStdin        bool
+	simpleMode      bool
+	outputFormat    string
+	showVersion     bool
 )
 
 func init() {
@@ -54,13 +65,37 @@ func init() {
 	flag.StringVar(&fuzzParams, "fuzz-params", "", "要fuzz的参数列表（逗号分隔）")
 	flag.StringVar(&fuzzDict, "fuzz-dict", "", "Fuzz字典文件路径")
 	flag.StringVar(&configFile, "config", "", "配置文件路径")
+	// v2.6 新增参数
+	flag.StringVar(&logLevel, "log-level", "info", "日志级别: debug, info, warn, error")
+	flag.StringVar(&logFile, "log-file", "", "日志文件路径（空表示输出到控制台）")
+	flag.StringVar(&logFormat, "log-format", "json", "日志格式: json, text")
+	flag.BoolVar(&showMetrics, "show-metrics", false, "显示实时监控指标")
+	// v2.6 新增：易用性参数（借鉴 Hakrawler/Katana）
+	flag.BoolVar(&useStdin, "stdin", false, "从标准输入读取URL（支持pipeline）")
+	flag.BoolVar(&simpleMode, "simple", false, "简洁模式（只输出URL，适合pipeline）")
+	flag.StringVar(&outputFormat, "format", "text", "输出格式: text, json, urls-only")
+	flag.BoolVar(&showVersion, "version", false, "显示版本信息")
 }
 
 func main() {
 	flag.Parse()
 
-	// 显示横幅
-	printBanner()
+	// v2.6: 处理 version 命令
+	if showVersion {
+		printVersion()
+		os.Exit(0)
+	}
+
+	// v2.6: 处理 stdin 模式（借鉴 Hakrawler）
+	if useStdin {
+		handleStdinMode()
+		return
+	}
+
+	// 简洁模式下不显示横幅
+	if !simpleMode {
+		printBanner()
+	}
 
 	// 加载配置
 	cfg := config.NewDefaultConfig()
@@ -81,6 +116,20 @@ func main() {
 	if enableFuzzing {
 		cfg.StrategySettings.EnableParamFuzzing = true
 		cfg.StrategySettings.EnablePOSTParamFuzzing = true
+	}
+	
+	// v2.6: 配置日志设置
+	if logLevel != "info" {
+		cfg.LogSettings.Level = strings.ToUpper(logLevel)
+	}
+	if logFile != "" {
+		cfg.LogSettings.OutputFile = logFile
+	}
+	if logFormat != "json" {
+		cfg.LogSettings.Format = logFormat
+	}
+	if showMetrics {
+		cfg.LogSettings.ShowMetrics = true
 	}
 
 	// 参数验证
@@ -134,9 +183,13 @@ func main() {
 	}
 
 	// 打印统计信息
-	printStats(results, elapsed)
-
-	fmt.Printf("\n[+] 结果已保存到当前目录\n")
+	if !simpleMode {
+		printStats(results, elapsed)
+		fmt.Printf("\n[+] 结果已保存到当前目录\n")
+	}
+	
+	// v2.6: 处理不同的输出格式（借鉴 Katana）
+	handleOutputFormat(results)
 }
 
 func printBanner() {
@@ -289,5 +342,138 @@ func printStats(results []*core.Result, elapsed time.Duration) {
 		fmt.Printf("平均速度:      %.2f 页/秒\n", float64(stats["总页面"])/elapsed.Seconds())
 	}
 	fmt.Println(strings.Repeat("=", 60))
+}
+
+// printVersion 显示版本信息（v2.6 新增）
+func printVersion() {
+	fmt.Println("Spider Ultimate v2.6")
+	fmt.Println("Build: 2025-10-24")
+	fmt.Println("Go Version: " + strings.TrimPrefix(filepath.Base(os.Args[0]), "go"))
+	fmt.Println("")
+	fmt.Println("Features:")
+	fmt.Println("  ✓ 静态+动态双引擎爬虫")
+	fmt.Println("  ✓ 参数爆破 (GET/POST)")
+	fmt.Println("  ✓ AJAX 拦截")
+	fmt.Println("  ✓ 智能表单填充")
+	fmt.Println("  ✓ 技术栈检测")
+	fmt.Println("  ✓ 敏感信息检测")
+	fmt.Println("  ✓ 结构化日志系统 🆕")
+	fmt.Println("  ✓ Pipeline 支持 🆕")
+	fmt.Println("")
+	fmt.Println("GitHub: https://github.com/Warren-Jace/gogospider")
+}
+
+// handleStdinMode 处理 stdin 模式（v2.6 新增，借鉴 Hakrawler）
+func handleStdinMode() {
+	// 从 stdin 读取 URL
+	scanner := bufio.NewScanner(os.Stdin)
+	urlCount := 0
+	
+	for scanner.Scan() {
+		url := strings.TrimSpace(scanner.Text())
+		if url == "" {
+			continue
+		}
+		
+		urlCount++
+		
+		// 为每个 URL 创建配置
+		cfg := config.NewDefaultConfig()
+		cfg.TargetURL = url
+		
+		if maxDepth != 3 {
+			cfg.DepthSettings.MaxDepth = maxDepth
+		}
+		if logLevel != "info" {
+			cfg.LogSettings.Level = strings.ToUpper(logLevel)
+		}
+		if enableFuzzing {
+			cfg.StrategySettings.EnableParamFuzzing = true
+		}
+		if proxy != "" {
+			cfg.AntiDetectionSettings.Proxies = []string{proxy}
+		}
+		
+		// 验证配置
+		if err := cfg.Validate(); err != nil {
+			if !simpleMode {
+				log.Printf("配置验证失败 %s: %v", url, err)
+			}
+			continue
+		}
+		
+		// 创建爬虫
+		spider := core.NewSpider(cfg)
+		defer spider.Close()
+		
+		// 爬取
+		err := spider.Start(url)
+		if err != nil && !simpleMode {
+			log.Printf("爬取失败 %s: %v", url, err)
+			continue
+		}
+		
+		// 获取结果
+		results := spider.GetResults()
+		
+		// 简洁模式：只输出 URL
+		if simpleMode {
+			for _, result := range results {
+				fmt.Println(result.URL)
+			}
+		} else {
+			// 正常模式：显示统计
+			fmt.Printf("[%d] %s - 发现 %d 个结果\n", urlCount, url, len(results))
+		}
+	}
+	
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("读取输入失败: %v", err)
+	}
+	
+	if !simpleMode {
+		fmt.Printf("\n总计处理 %d 个URL\n", urlCount)
+	}
+}
+
+// handleOutputFormat 处理输出格式（v2.6 新增，借鉴 Katana）
+func handleOutputFormat(results []*core.Result) {
+	switch outputFormat {
+	case "json":
+		// JSON 格式输出
+		output := map[string]interface{}{
+			"version": "2.6",
+			"timestamp": time.Now().Format(time.RFC3339),
+			"total": len(results),
+			"results": results,
+		}
+		data, err := json.MarshalIndent(output, "", "  ")
+		if err != nil {
+			log.Printf("JSON 编码失败: %v", err)
+			return
+		}
+		fmt.Println(string(data))
+		
+	case "urls-only":
+		// 只输出 URL（去重）
+		urlSet := make(map[string]bool)
+		for _, result := range results {
+			if !urlSet[result.URL] {
+				fmt.Println(result.URL)
+				urlSet[result.URL] = true
+			}
+			// 也输出发现的链接
+			for _, link := range result.Links {
+				if !urlSet[link] {
+					fmt.Println(link)
+					urlSet[link] = true
+				}
+			}
+		}
+		
+	case "text":
+		// 默认文本格式（已经在前面处理）
+		// 不需要额外操作
+	}
 }
 
