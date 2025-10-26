@@ -24,6 +24,13 @@ type Config struct {
 
 	// 日志设置（v2.6 新增）
 	LogSettings LogSettings
+	
+	// 🆕 v2.9 新增功能
+	OutputSettings OutputSettings         // 输出设置
+	RateLimitSettings RateLimitSettings   // 速率限制设置
+	ExternalSourceSettings ExternalSourceSettings // 外部数据源设置
+	ScopeSettings ScopeSettings           // Scope设置
+	PipelineSettings PipelineSettings     // 管道模式设置
 }
 
 // DepthSettings 爬取深度设置
@@ -63,7 +70,7 @@ type StrategySettings struct {
 	
 	// 🆕 v2.8 新增配置
 	UsePriorityQueue     bool // 是否使用优先级队列模式（默认false，使用BFS）
-	EnableCommonPathScan bool // 是否启用200个常见路径扫描（默认true）
+	EnableCommonPathScan bool // 是否启用200个常见路径扫描（默认false，性能考虑）
 }
 
 // AntiDetectionSettings 反爬设置
@@ -131,6 +138,134 @@ type LogSettings struct {
 	ShowMetrics bool
 }
 
+// OutputSettings 输出设置（v2.9 新增）
+type OutputSettings struct {
+	// 输出格式: text, json, jsonl
+	Format string
+	
+	// 输出文件（为空则输出到stdout）
+	OutputFile string
+	
+	// JSON输出模式: compact, pretty, line
+	JSONMode string
+	
+	// 是否包含所有字段
+	IncludeAll bool
+	
+	// 是否输出详细信息
+	Verbose bool
+}
+
+// RateLimitSettings 速率限制设置（v2.9 新增）
+type RateLimitSettings struct {
+	// 是否启用速率限制
+	Enabled bool
+	
+	// 每秒最大请求数
+	RequestsPerSecond int
+	
+	// 突发请求数
+	BurstSize int
+	
+	// 最小请求间隔（毫秒）
+	MinDelay int
+	
+	// 最大请求间隔（毫秒）
+	MaxDelay int
+	
+	// 是否启用自适应速率
+	Adaptive bool
+	
+	// 自适应速率范围
+	AdaptiveMinRate int
+	AdaptiveMaxRate int
+}
+
+// ExternalSourceSettings 外部数据源设置（v2.9 新增）
+type ExternalSourceSettings struct {
+	// 是否启用外部数据源
+	Enabled bool
+	
+	// 启用Wayback Machine
+	EnableWaybackMachine bool
+	
+	// 启用VirusTotal
+	EnableVirusTotal bool
+	VirusTotalAPIKey string
+	
+	// 启用CommonCrawl
+	EnableCommonCrawl bool
+	
+	// 每个数据源最大结果数
+	MaxResultsPerSource int
+	
+	// 超时时间（秒）
+	Timeout int
+}
+
+// ScopeSettings Scope设置（v2.9 新增）
+type ScopeSettings struct {
+	// 是否启用Scope控制
+	Enabled bool
+	
+	// 包含的域名
+	IncludeDomains []string
+	
+	// 排除的域名
+	ExcludeDomains []string
+	
+	// 包含的路径模式
+	IncludePaths []string
+	
+	// 排除的路径模式
+	ExcludePaths []string
+	
+	// 包含的URL正则
+	IncludeRegex string
+	
+	// 排除的URL正则
+	ExcludeRegex string
+	
+	// 包含的文件扩展名
+	IncludeExtensions []string
+	
+	// 排除的文件扩展名
+	ExcludeExtensions []string
+	
+	// 允许子域名
+	AllowSubdomains bool
+	
+	// 限制在同一域名内
+	StayInDomain bool
+	
+	// 允许HTTP
+	AllowHTTP bool
+	
+	// 允许HTTPS
+	AllowHTTPS bool
+}
+
+// PipelineSettings 管道模式设置（v2.9 新增）
+type PipelineSettings struct {
+	// 是否启用管道模式
+	Enabled bool
+	
+	// 启用标准输入
+	EnableStdin bool
+	
+	// 启用标准输出
+	EnableStdout bool
+	
+	// 输入格式: text, json
+	InputFormat string
+	
+	// 输出格式: text, json, jsonl
+	OutputFormat string
+	
+	// 静默模式（不输出日志到stderr）
+	Quiet bool
+}
+
 // NewDefaultConfig 创建默认配置（优化版 - 超越crawlergo）
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -140,11 +275,13 @@ func NewDefaultConfig() *Config {
 			SchedulingAlgorithm: "BFS", // 广度优先，确保覆盖全面
 		},
 		StrategySettings: StrategySettings{
-			EnableStaticCrawler:  true, // 启用静态爬虫
-			EnableDynamicCrawler: true, // 启用动态爬虫（已优化）
-			EnableJSAnalysis:     true, // 启用JS分析
-			EnableAPIInference:   true, // 启用API推测
-			DomainScope:          "",   // 默认不限制
+			EnableStaticCrawler:   true,  // 启用静态爬虫
+			EnableDynamicCrawler:  true,  // 启用动态爬虫（已优化）
+			EnableJSAnalysis:      true,  // 启用JS分析
+			EnableAPIInference:    true,  // 启用API推测
+			DomainScope:           "",    // 默认不限制
+			UsePriorityQueue:      false, // 默认使用BFS
+			EnableCommonPathScan:  false, // 🔧 默认禁用（性能考虑）
 			// 参数爆破功能已移除（专注于纯爬虫）
 		},
 		AntiDetectionSettings: AntiDetectionSettings{
@@ -184,6 +321,67 @@ func NewDefaultConfig() *Config {
 			OutputFile:  "",     // 默认输出到控制台
 			Format:      "json", // 默认JSON格式
 			ShowMetrics: false,  // 默认不显示实时指标
+		},
+		
+		// 🆕 v2.9 新增功能默认配置
+		OutputSettings: OutputSettings{
+			Format:     "text",    // 默认文本格式
+			OutputFile: "",        // 默认输出到stdout
+			JSONMode:   "line",    // 默认行分隔JSON (NDJSON)
+			IncludeAll: false,     // 默认只输出核心字段
+			Verbose:    false,     // 默认非详细模式
+		},
+		
+		RateLimitSettings: RateLimitSettings{
+			Enabled:           false, // 默认不启用速率限制
+			RequestsPerSecond: 100,   // 默认100 req/s
+			BurstSize:         10,    // 默认允许10个突发请求
+			MinDelay:          0,     // 默认无最小延迟
+			MaxDelay:          0,     // 默认无最大延迟
+			Adaptive:          false, // 默认不启用自适应
+			AdaptiveMinRate:   10,    // 自适应最小速率
+			AdaptiveMaxRate:   200,   // 自适应最大速率
+		},
+		
+		ExternalSourceSettings: ExternalSourceSettings{
+			Enabled:              false, // 默认不启用外部数据源
+			EnableWaybackMachine: false,
+			EnableVirusTotal:     false,
+			VirusTotalAPIKey:     "",
+			EnableCommonCrawl:    false,
+			MaxResultsPerSource:  1000, // 每个数据源最多1000个结果
+			Timeout:              30,   // 30秒超时
+		},
+		
+		ScopeSettings: ScopeSettings{
+			Enabled:           false,   // 默认不启用Scope控制
+			IncludeDomains:    []string{},
+			ExcludeDomains:    []string{},
+			IncludePaths:      []string{},
+			ExcludePaths:      []string{},
+			IncludeRegex:      "",
+			ExcludeRegex:      "",
+			IncludeExtensions: []string{},
+			ExcludeExtensions: []string{
+				"jpg", "jpeg", "png", "gif", "svg", "ico",
+				"css", "js", "woff", "woff2", "ttf", "eot",
+				"mp4", "mp3", "avi", "mov",
+				"pdf", "doc", "docx", "xls", "xlsx",
+				"zip", "rar", "tar", "gz",
+			}, // 默认排除静态资源
+			AllowSubdomains: false, // 默认不允许子域名
+			StayInDomain:    true,  // 默认限制在同一域名内
+			AllowHTTP:       true,  // 允许HTTP
+			AllowHTTPS:      true,  // 允许HTTPS
+		},
+		
+		PipelineSettings: PipelineSettings{
+			Enabled:      false,  // 默认不启用管道模式
+			EnableStdin:  false,
+			EnableStdout: false,
+			InputFormat:  "text", // 默认文本输入
+			OutputFormat: "text", // 默认文本输出
+			Quiet:        false,  // 默认不静默
 		},
 	}
 }

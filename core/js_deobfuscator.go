@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -622,5 +622,5 @@ func (jd *JSDeobfuscator) isPrintable(s string) bool {
 
 // SaveToFile 保存到文件
 func (jd *JSDeobfuscator) SaveToFile(filename string) error {
-	return ioutil.WriteFile(filename, []byte(jd.code), 0644)
+	return os.WriteFile(filename, []byte(jd.code), 0644)
 }

@@ -51,6 +51,7 @@ type Spider struct {
 	cssAnalyzer         *CSSAnalyzer            // CSS分析器
 	resourceClassifier  *ResourceClassifier     // 资源分类器
 	urlDeduplicator     *URLDeduplicator        // URL去重器（忽略参数值）
+	urlStructureDedup   *URLStructureDeduplicator // URL结构化去重器（路径变量+参数）
 	priorityScheduler   *URLPriorityScheduler   // 优先级调度器（可选）
 
 	results           []*Result
@@ -146,6 +147,7 @@ func NewSpider(cfg *config.Config) *Spider {
 		cssAnalyzer:        NewCSSAnalyzer(),              // CSS分析器
 		resourceClassifier: nil,                           // 将在Start中初始化（需要目标域名）
 		urlDeduplicator:    NewURLDeduplicator(),         // URL去重器
+		urlStructureDedup:  NewURLStructureDeduplicator(), // URL结构化去重器
 		priorityScheduler:  nil,                           // 将在Start中初始化（可选，需要配置）
 
 		hiddenPathDiscovery: nil, // 将在Start方法中初始化，需要用户代理
@@ -288,13 +290,17 @@ func (s *Spider) Start(targetURL string) error {
 		s.visitedURLs[u] = false // Disallow路径也要爬取
 	}
 
-	// 开始隐藏路径发现
-	s.logger.Info("开始扫描隐藏路径")
-	hiddenPaths := s.hiddenPathDiscovery.DiscoverAllHiddenPaths()
-	s.mutex.Lock()
-	s.hiddenPaths = append(s.hiddenPaths, hiddenPaths...)
-	s.mutex.Unlock()
-	s.logger.Info("隐藏路径扫描完成", "count", len(hiddenPaths))
+	// 开始隐藏路径发现（可选）
+	if s.config.StrategySettings.EnableCommonPathScan {
+		s.logger.Info("开始扫描隐藏路径")
+		hiddenPaths := s.hiddenPathDiscovery.DiscoverAllHiddenPaths()
+		s.mutex.Lock()
+		s.hiddenPaths = append(s.hiddenPaths, hiddenPaths...)
+		s.mutex.Unlock()
+		s.logger.Info("隐藏路径扫描完成", "count", len(hiddenPaths))
+	} else {
+		s.logger.Info("跳过隐藏路径扫描（EnableCommonPathScan=false）")
+	}
 
 	// 根据配置决定使用哪种爬虫策略
 	if s.config.StrategySettings.EnableStaticCrawler {
@@ -375,38 +381,84 @@ func (s *Spider) shouldUseDynamicCrawler() bool {
 	return false
 }
 
+// isInTargetDomain 检查URL是否属于目标域名
+func (s *Spider) isInTargetDomain(urlStr string) bool {
+	// 忽略特殊协议
+	if strings.HasPrefix(urlStr, "mailto:") || 
+	   strings.HasPrefix(urlStr, "tel:") ||
+	   strings.HasPrefix(urlStr, "javascript:") ||
+	   strings.HasPrefix(urlStr, "data:") {
+		return false
+	}
+	
+	// 解析URL提取域名
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false
+	}
+	
+	// 获取URL的域名（不含端口）
+	urlHost := parsedURL.Hostname()
+	if urlHost == "" {
+		return false
+	}
+	
+	// 目标域名（不含端口）
+	targetHost := s.targetDomain
+	
+	// 完全匹配
+	if urlHost == targetHost {
+		return true
+	}
+	
+	// 子域名匹配（例如：api.example.com 匹配 example.com）
+	if strings.HasSuffix(urlHost, "."+targetHost) {
+		return true
+	}
+	
+	return false
+}
+
 // addResult 添加爬取结果（增强版：包含DOM相似度检测、技术栈检测和敏感信息检测）
 func (s *Spider) addResult(result *Result) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	
-	// 🆕 将域内URL添加到去重器
+	// 🆕 将域内URL添加到去重器（只添加目标域名的URL）
 	if s.urlDeduplicator != nil && result != nil {
 		// 添加当前页面URL
-		if result.URL != "" {
+		if result.URL != "" && s.isInTargetDomain(result.URL) {
 			s.urlDeduplicator.AddURL(result.URL)
 		}
 		
-		// 添加发现的所有链接（域内的）
+		// 添加发现的所有链接（只添加域内的）
 		if len(result.Links) > 0 {
-			s.urlDeduplicator.AddURLs(result.Links)
+			for _, link := range result.Links {
+				if s.isInTargetDomain(link) {
+					s.urlDeduplicator.AddURL(link)
+				}
+			}
 		}
 		
-		// 添加API端点
+		// 添加API端点（只添加域内的）
 		if len(result.APIs) > 0 {
-			s.urlDeduplicator.AddURLs(result.APIs)
+			for _, api := range result.APIs {
+				if s.isInTargetDomain(api) {
+					s.urlDeduplicator.AddURL(api)
+				}
+			}
 		}
 		
-		// 添加表单action
+		// 添加表单action（只添加域内的）
 		for _, form := range result.Forms {
-			if form.Action != "" {
+			if form.Action != "" && s.isInTargetDomain(form.Action) {
 				s.urlDeduplicator.AddURL(form.Action)
 			}
 		}
 		
-		// 添加POST请求URL
+		// 添加POST请求URL（只添加域内的）
 		for _, postReq := range result.POSTRequests {
-			if postReq.URL != "" {
+			if postReq.URL != "" && s.isInTargetDomain(postReq.URL) {
 				s.urlDeduplicator.AddURL(postReq.URL)
 			}
 		}
@@ -1799,6 +1851,102 @@ func (s *Spider) PrintBusinessFilterReport() {
 func (s *Spider) PrintURLPatternDedupReport() {
 	if s.urlPatternDedup != nil {
 		s.urlPatternDedup.PrintReport()
+	}
+}
+
+// SaveStructureUniqueURLsToFile 保存结构化去重后的URL到文件
+// 该方法会识别路径变量（如 /product-123/ → /product-{num}/）和参数值变化
+// 只保存每个结构的代表性URL，避免保存大量相似URL
+func (s *Spider) SaveStructureUniqueURLsToFile(filepath string) error {
+	if s.urlStructureDedup == nil {
+		return fmt.Errorf("URL结构化去重器未初始化")
+	}
+	
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	// 获取唯一的结构化URL
+	uniqueStructures := s.urlStructureDedup.GetUniqueStructures()
+	
+	if len(uniqueStructures) == 0 {
+		return fmt.Errorf("没有URL可保存")
+	}
+	
+	// 创建文件
+	file, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("创建文件失败: %v", err)
+	}
+	defer file.Close()
+	
+	// 写入URL（每行一个）
+	for _, url := range uniqueStructures {
+		_, err := file.WriteString(url + "\n")
+		if err != nil {
+			return fmt.Errorf("写入文件失败: %v", err)
+		}
+	}
+	
+	// 打印统计
+	stats := s.urlStructureDedup.GetStatistics()
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("  ✅ 结构化去重URL文件已保存: %s\n", filepath)
+	fmt.Printf("  唯一URL结构: %d 个\n", stats["unique_structures"])
+	fmt.Printf("  原始URL总数: %d 个\n", stats["total_urls"])
+	if stats["total_urls"] > stats["unique_structures"] {
+		reduction := stats["duplicate_urls"]
+		reductionPercent := float64(reduction) / float64(stats["total_urls"]) * 100
+		fmt.Printf("  去重效果: 减少 %d 个 (%.1f%%)\n", reduction, reductionPercent)
+	}
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	
+	return nil
+}
+
+// PrintStructureDeduplicationReport 打印结构化去重详细报告
+func (s *Spider) PrintStructureDeduplicationReport() {
+	if s.urlStructureDedup != nil {
+		s.urlStructureDedup.PrintReport()
+	}
+}
+
+// CollectAllURLsForStructureDedup 收集所有URL并添加到结构化去重器
+// 该方法应在爬取完成后调用，用于分析和去重所有发现的URL
+func (s *Spider) CollectAllURLsForStructureDedup() {
+	if s.urlStructureDedup == nil {
+		return
+	}
+	
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	// 收集所有URL（只收集目标域名的URL）
+	for _, result := range s.results {
+		// 添加页面URL
+		if s.isInTargetDomain(result.URL) {
+			s.urlStructureDedup.AddURL(result.URL)
+		}
+		
+		// 添加发现的链接（只添加域内的）
+		for _, link := range result.Links {
+			if s.isInTargetDomain(link) {
+				s.urlStructureDedup.AddURL(link)
+			}
+		}
+		
+		// 添加API（只添加域内的）
+		for _, api := range result.APIs {
+			if s.isInTargetDomain(api) {
+				s.urlStructureDedup.AddURL(api)
+			}
+		}
+		
+		// 添加表单URL（只添加域内的）
+		for _, form := range result.Forms {
+			if form.Action != "" && s.isInTargetDomain(form.Action) {
+				s.urlStructureDedup.AddURL(form.Action)
+			}
+		}
 	}
 }
 

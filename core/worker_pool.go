@@ -73,6 +73,18 @@ func (wp *WorkerPool) Start(workerFunc func(task Task) (*Result, error)) {
 // worker 工作协程
 func (wp *WorkerPool) worker(id int, workerFunc func(task Task) (*Result, error)) {
 	defer wp.wg.Done()
+	
+	// 🔧 优化：添加panic恢复机制
+	defer func() {
+		if r := recover(); r != nil {
+			wp.mutex.Lock()
+			wp.failedTasks++
+			wp.mutex.Unlock()
+			
+			// 记录panic
+			wp.errorChan <- fmt.Errorf("worker %d panic: %v", id, r)
+		}
+	}()
 
 	for {
 		select {

@@ -25,7 +25,7 @@ type HiddenPathDiscovery struct {
 func NewHiddenPathDiscovery(baseURL, userAgent string) *HiddenPathDiscovery {
 	return &HiddenPathDiscovery{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 3 * time.Second, // 🔧 优化：减少超时时间（10秒→3秒）
 		},
 		baseURL:   baseURL,
 		userAgent: userAgent,
@@ -80,19 +80,48 @@ func (hpd *HiddenPathDiscovery) DiscoverAllHiddenPaths() []string {
 	return hpd.GetResults()
 }
 
-// discoverCommonBusinessPaths 🆕 发现常见业务路径（使用内置的200个路径）
+// discoverCommonBusinessPaths 🆕 发现常见业务路径（并发优化版）
 func (hpd *HiddenPathDiscovery) discoverCommonBusinessPaths() {
 	fmt.Println("  [路径发现] 开始扫描200个常见业务路径...")
 	
 	foundCount := 0
 	totalCount := len(CommonPaths)
 	
-	// 使用内置的CommonPaths列表
+	// 🔧 优化：使用并发扫描，减少耗时
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 20) // 最多20个并发请求
+	resultChan := make(chan string, totalCount)
+	
 	for _, commonPath := range CommonPaths {
-		testURL := hpd.resolveURL(commonPath)
-		if hpd.checkPath(testURL) {
-			hpd.addResult(fmt.Sprintf("BUSINESS_PATH: %s", testURL))
-			foundCount++
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
+			
+			// 获取信号量
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			
+			testURL := hpd.resolveURL(path)
+			if hpd.checkPathQuick(testURL) {
+				resultChan <- testURL
+			}
+		}(commonPath)
+	}
+	
+	// 等待所有goroutine完成
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+	
+	// 收集结果
+	for testURL := range resultChan {
+		hpd.addResult(fmt.Sprintf("BUSINESS_PATH: %s", testURL))
+		foundCount++
+		
+		// 每发现10个打印一次进度
+		if foundCount%10 == 0 {
+			fmt.Printf("  [路径发现] 已发现 %d 个...\n", foundCount)
 		}
 	}
 	
@@ -392,6 +421,31 @@ func (hpd *HiddenPathDiscovery) checkPath(testURL string) bool {
 	defer resp.Body.Close()
 	
 	// 检查状态码，200, 301, 302, 403 都表示路径存在
+	return resp.StatusCode == 200 || resp.StatusCode == 301 || 
+		   resp.StatusCode == 302 || resp.StatusCode == 403 || 
+		   resp.StatusCode == 401 || resp.StatusCode == 500
+}
+
+// checkPathQuick 快速检查路径（用于并发扫描）
+func (hpd *HiddenPathDiscovery) checkPathQuick(testURL string) bool {
+	// 使用HEAD请求，更快
+	req, err := http.NewRequest("HEAD", testURL, nil)
+	if err != nil {
+		// HEAD失败，尝试GET
+		return hpd.checkPath(testURL)
+	}
+	
+	if hpd.userAgent != "" {
+		req.Header.Set("User-Agent", hpd.userAgent)
+	}
+	
+	resp, err := hpd.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	
+	// 检查状态码
 	return resp.StatusCode == 200 || resp.StatusCode == 301 || 
 		   resp.StatusCode == 302 || resp.StatusCode == 403 || 
 		   resp.StatusCode == 401 || resp.StatusCode == 500

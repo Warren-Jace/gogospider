@@ -1,13 +1,10 @@
 package core
 
 import (
-	"crypto/md5"
 	"fmt"
 	"math/rand"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -27,39 +24,6 @@ type StaticCrawlerImpl struct {
 	paramHandler     *ParamHandler
 }
 
-// 保存响应数据包到文件
-func (s *StaticCrawlerImpl) saveResponseToFile(url string, body []byte, contentType string) error {
-	// 创建responses目录
-	dir := filepath.Join(".", "responses")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-	
-	// 生成文件名（使用URL的MD5哈希）
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(url)))
-	
-	// 根据内容类型确定文件扩展名
-	var ext string
-	switch {
-	case strings.Contains(contentType, "text/html"):
-		ext = ".html"
-	case strings.Contains(contentType, "application/javascript") || strings.Contains(contentType, "text/javascript"):
-		ext = ".js"
-	case strings.Contains(contentType, "text/css"):
-		ext = ".css"
-	case strings.Contains(contentType, "application/json"):
-		ext = ".json"
-	case strings.Contains(contentType, "image/"):
-		ext = ".bin" // 默认二进制格式
-	default:
-		ext = ".txt"
-	}
-	
-	filename := filepath.Join(dir, hash+ext)
-	
-	// 写入文件
-	return os.WriteFile(filename, body, 0644)
-}
 
 // NewStaticCrawler 创建新的静态爬虫实例
 func NewStaticCrawler(config *config.Config, resultChan chan<- Result, stopChan chan struct{}) StaticCrawler {
@@ -555,11 +519,6 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			if len(values) > 0 {
 				result.Headers[key] = values[0]
 			}
-		}
-		
-		// 保存响应数据包
-		if err := s.saveResponseToFile(r.Request.URL.String(), r.Body, result.ContentType); err != nil {
-			fmt.Printf("保存响应数据包失败 %s: %v\n", r.Request.URL.String(), err)
 		}
 		
 		// === 优化1：提取响应头中的URL ===
