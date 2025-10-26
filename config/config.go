@@ -31,6 +31,9 @@ type Config struct {
 	ExternalSourceSettings ExternalSourceSettings // 外部数据源设置
 	ScopeSettings ScopeSettings           // Scope设置
 	PipelineSettings PipelineSettings     // 管道模式设置
+	
+	// 🆕 敏感信息检测设置
+	SensitiveDetectionSettings SensitiveDetectionSettings // 敏感信息检测设置
 }
 
 // DepthSettings 爬取深度设置
@@ -266,6 +269,47 @@ type PipelineSettings struct {
 	Quiet bool
 }
 
+// SensitiveDetectionSettings 敏感信息检测设置（v2.10 新增）
+type SensitiveDetectionSettings struct {
+	// 是否启用敏感信息检测
+	Enabled bool
+	
+	// 是否扫描HTTP响应体
+	ScanResponseBody bool
+	
+	// 是否扫描HTTP响应头
+	ScanResponseHeaders bool
+	
+	// 最低严重级别: LOW, MEDIUM, HIGH
+	MinSeverity string
+	
+	// 是否启用自定义模式
+	EnableCustomPatterns bool
+	
+	// 自定义检测模式列表（正则表达式）
+	CustomPatterns []CustomPattern
+	
+	// 是否保存完整敏感值（默认false，只保存脱敏值）
+	SaveFullValue bool
+	
+	// 敏感信息输出文件（为空则只在内存中保存）
+	OutputFile string
+	
+	// 是否实时输出敏感信息发现
+	RealTimeOutput bool
+	
+	// 排除的URL模式（不检测这些URL）
+	ExcludeURLPatterns []string
+}
+
+// CustomPattern 自定义检测模式
+type CustomPattern struct {
+	Name     string // 模式名称
+	Pattern  string // 正则表达式
+	Severity string // 严重程度: HIGH/MEDIUM/LOW
+	Mask     bool   // 是否需要脱敏
+}
+
 // NewDefaultConfig 创建默认配置（优化版 - 超越crawlergo）
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -382,6 +426,20 @@ func NewDefaultConfig() *Config {
 			InputFormat:  "text", // 默认文本输入
 			OutputFormat: "text", // 默认文本输出
 			Quiet:        false,  // 默认不静默
+		},
+		
+		// 🆕 v2.10: 敏感信息检测默认配置
+		SensitiveDetectionSettings: SensitiveDetectionSettings{
+			Enabled:              true,   // 默认启用敏感信息检测
+			ScanResponseBody:     true,   // 扫描响应体
+			ScanResponseHeaders:  true,   // 扫描响应头
+			MinSeverity:          "LOW",  // 最低级别：显示所有
+			EnableCustomPatterns: false,  // 默认不启用自定义模式
+			CustomPatterns:       []CustomPattern{},
+			SaveFullValue:        false,  // 只保存脱敏值（安全）
+			OutputFile:           "",     // 默认不单独保存（包含在总报告中）
+			RealTimeOutput:       true,   // 实时输出敏感信息发现
+			ExcludeURLPatterns:   []string{}, // 默认不排除任何URL
 		},
 	}
 }

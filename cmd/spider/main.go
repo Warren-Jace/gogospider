@@ -83,6 +83,19 @@ var (
 	// 管道模式
 	enablePipeline  bool
 	quietMode       bool
+	
+	// 🆕 v2.10: 敏感信息检测参数
+	enableSensitiveDetection bool
+	sensitiveScanBody        bool
+	sensitiveScanHeaders     bool
+	sensitiveMinSeverity     string
+	sensitiveOutputFile      string
+	sensitiveRealTime        bool
+	sensitiveRulesFile       string // 外部规则文件
+	
+	// 🆕 v2.11: 批量扫描参数
+	batchFile               string // 批量URL文件
+	batchConcurrency        int    // 批量扫描并发数
 )
 
 func init() {
@@ -152,6 +165,19 @@ func init() {
 	// 管道模式参数
 	flag.BoolVar(&enablePipeline, "pipeline", false, "启用管道模式")
 	flag.BoolVar(&quietMode, "quiet", false, "静默模式（日志输出到stderr）")
+	
+	// 🆕 v2.10: 敏感信息检测参数
+	flag.BoolVar(&enableSensitiveDetection, "sensitive-detect", true, "启用敏感信息检测（默认开启）")
+	flag.BoolVar(&sensitiveScanBody, "sensitive-scan-body", true, "扫描响应体中的敏感信息")
+	flag.BoolVar(&sensitiveScanHeaders, "sensitive-scan-headers", true, "扫描响应头中的敏感信息")
+	flag.StringVar(&sensitiveMinSeverity, "sensitive-min-severity", "LOW", "最低严重级别: LOW, MEDIUM, HIGH")
+	flag.StringVar(&sensitiveOutputFile, "sensitive-output", "", "敏感信息输出文件路径")
+	flag.BoolVar(&sensitiveRealTime, "sensitive-realtime", true, "实时输出敏感信息发现")
+	flag.StringVar(&sensitiveRulesFile, "sensitive-rules", "", "外部敏感信息规则文件（JSON格式）")
+	
+	// 🆕 v2.11: 批量扫描参数
+	flag.StringVar(&batchFile, "batch-file", "", "批量扫描URL列表文件（每行一个URL）")
+	flag.IntVar(&batchConcurrency, "batch-concurrency", 5, "批量扫描并发数（默认5）")
 }
 
 
@@ -176,6 +202,12 @@ func main() {
 	// v2.6: 处理 stdin 模式（借鉴 Hakrawler）
 	if useStdin {
 		handleStdinMode()
+		return
+	}
+	
+	// 🆕 v2.11: 处理批量扫描模式
+	if batchFile != "" {
+		handleBatchScanMode()
 		return
 	}
 
@@ -315,6 +347,14 @@ func main() {
 		cfg.PipelineSettings.EnableStdout = true
 		cfg.PipelineSettings.Quiet = quietMode
 	}
+	
+	// 🆕 v2.10: 敏感信息检测配置
+	cfg.SensitiveDetectionSettings.Enabled = enableSensitiveDetection
+	cfg.SensitiveDetectionSettings.ScanResponseBody = sensitiveScanBody
+	cfg.SensitiveDetectionSettings.ScanResponseHeaders = sensitiveScanHeaders
+	cfg.SensitiveDetectionSettings.MinSeverity = strings.ToUpper(sensitiveMinSeverity)
+	cfg.SensitiveDetectionSettings.OutputFile = sensitiveOutputFile
+	cfg.SensitiveDetectionSettings.RealTimeOutput = sensitiveRealTime
 
 	// 参数验证
 	if cfg.TargetURL == "" {
@@ -332,6 +372,13 @@ func main() {
 	// 创建爬虫实例
 	spider := core.NewSpider(cfg)
 	defer spider.Close() // 确保资源清理
+	
+	// 🆕 v2.11: 如果指定了外部规则文件，加载它
+	if sensitiveRulesFile != "" {
+		if err := spider.MergeSensitiveRules(sensitiveRulesFile); err != nil {
+			fmt.Printf("警告: 加载敏感规则失败: %v\n", err)
+		}
+	}
 
 	// 启动爬取
 	fmt.Printf("\n[*] 开始爬取: %s\n", cfg.TargetURL)
@@ -385,6 +432,28 @@ func main() {
 	structureUniqueFile := baseFilename + "_structure_unique_urls.txt"
 	if err := spider.SaveStructureUniqueURLsToFile(structureUniqueFile); err != nil {
 		log.Printf("保存结构化去重URL失败: %v", err)
+	}
+	
+	// 🆕 v2.11: 保存敏感信息到独立文件
+	if enableSensitiveDetection {
+		// 保存文本格式
+		sensitiveFile := baseFilename + "_sensitive.txt"
+		if err := spider.SaveSensitiveInfoToFile(sensitiveFile); err != nil {
+			log.Printf("保存敏感信息失败: %v", err)
+		}
+		
+		// 保存JSON格式（如果指定了输出文件）
+		if sensitiveOutputFile != "" {
+			if err := spider.SaveSensitiveInfoToJSON(sensitiveOutputFile); err != nil {
+				log.Printf("保存敏感信息JSON失败: %v", err)
+			}
+		} else {
+			// 默认也保存JSON格式
+			sensitiveJSONFile := baseFilename + "_sensitive.json"
+			if err := spider.SaveSensitiveInfoToJSON(sensitiveJSONFile); err != nil {
+				log.Printf("保存敏感信息JSON失败: %v", err)
+			}
+		}
 	}
 	
 	// 打印统计信息
@@ -964,4 +1033,177 @@ func loadConfigFile(filename string) (*config.Config, error) {
 	}
 	
 	return &cfg, nil
+}
+
+// handleBatchScanMode 处理批量扫描模式（v2.11 新增）
+func handleBatchScanMode() {
+	fmt.Printf("\n╔════════════════════════════════════════════════╗\n")
+	fmt.Printf("║     GogoSpider - 批量扫描模式               ║\n")
+	fmt.Printf("╚════════════════════════════════════════════════╝\n\n")
+	
+	// 读取URL列表文件
+	file, err := os.Open(batchFile)
+	if err != nil {
+		log.Fatalf("打开URL列表文件失败: %v", err)
+	}
+	defer file.Close()
+	
+	// 读取所有URL
+	var urls []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		url := strings.TrimSpace(scanner.Text())
+		if url == "" || strings.HasPrefix(url, "#") {
+			continue // 跳过空行和注释行
+		}
+		urls = append(urls, url)
+	}
+	
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("读取URL列表失败: %v", err)
+	}
+	
+	if len(urls) == 0 {
+		log.Fatalf("URL列表为空")
+	}
+	
+	fmt.Printf("[批量扫描] 共读取 %d 个URL，并发数: %d\n\n", len(urls), batchConcurrency)
+	
+	// 创建并发控制
+	sem := make(chan struct{}, batchConcurrency)
+	var wg sync.WaitGroup
+	var successCount, failCount int
+	var mu sync.Mutex
+	
+	startTime := time.Now()
+	
+	// 遍历每个URL进行扫描
+	for i, url := range urls {
+		wg.Add(1)
+		go func(index int, targetURL string) {
+			defer wg.Done()
+			
+			// 获取信号量
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			
+			fmt.Printf("\n[%d/%d] 开始扫描: %s\n", index+1, len(urls), targetURL)
+			
+			// 创建配置
+			cfg := config.NewDefaultConfig()
+			cfg.TargetURL = targetURL
+			
+			// 应用命令行参数
+			if maxDepth != 3 {
+				cfg.DepthSettings.MaxDepth = maxDepth
+			}
+			if proxy != "" {
+				cfg.AntiDetectionSettings.Proxies = []string{proxy}
+			}
+			if userAgent != "" {
+				cfg.AntiDetectionSettings.UserAgents = []string{userAgent}
+			}
+			if logLevel != "info" {
+				cfg.LogSettings.Level = strings.ToUpper(logLevel)
+			}
+			
+			// 敏感信息检测配置
+			cfg.SensitiveDetectionSettings.Enabled = enableSensitiveDetection
+			cfg.SensitiveDetectionSettings.ScanResponseBody = sensitiveScanBody
+			cfg.SensitiveDetectionSettings.ScanResponseHeaders = sensitiveScanHeaders
+			cfg.SensitiveDetectionSettings.MinSeverity = strings.ToUpper(sensitiveMinSeverity)
+			cfg.SensitiveDetectionSettings.RealTimeOutput = false // 批量模式下关闭实时输出
+			
+			// 配置验证
+			if err := cfg.Validate(); err != nil {
+				fmt.Printf("  ❌ 配置验证失败: %v\n", err)
+				mu.Lock()
+				failCount++
+				mu.Unlock()
+				return
+			}
+			
+			// 创建爬虫实例
+			spider := core.NewSpider(cfg)
+			defer spider.Close()
+			
+			// 🆕 如果指定了外部规则文件，加载它
+			if sensitiveRulesFile != "" {
+				if err := spider.MergeSensitiveRules(sensitiveRulesFile); err != nil {
+					fmt.Printf("  警告: 加载敏感规则失败: %v\n", err)
+				}
+			}
+			
+			// 执行爬取
+			err := spider.Start(targetURL)
+			if err != nil {
+				fmt.Printf("  ❌ 爬取失败: %v\n", err)
+				mu.Lock()
+				failCount++
+				mu.Unlock()
+				return
+			}
+			
+			// 获取结果
+			results := spider.GetResults()
+			
+			// 生成输出文件名
+			timestamp := time.Now().Format("20060102_150405")
+			domain := extractDomain(targetURL)
+			baseFilename := fmt.Sprintf("batch_%s_%s", domain, timestamp)
+			
+			// 保存结果
+			if err := saveResults(results, baseFilename+".txt"); err != nil {
+				fmt.Printf("  警告: 保存结果失败: %v\n", err)
+			}
+			
+			// 保存URL列表
+			if err := saveAllURLs(results, baseFilename); err != nil {
+				fmt.Printf("  警告: 保存URL失败: %v\n", err)
+			}
+			
+			// 保存敏感信息
+			if enableSensitiveDetection {
+				sensitiveFile := baseFilename + "_sensitive.txt"
+				if err := spider.SaveSensitiveInfoToFile(sensitiveFile); err != nil {
+					fmt.Printf("  警告: 保存敏感信息失败: %v\n", err)
+				}
+				
+				sensitiveJSONFile := baseFilename + "_sensitive.json"
+				if err := spider.SaveSensitiveInfoToJSON(sensitiveJSONFile); err != nil {
+					fmt.Printf("  警告: 保存敏感信息JSON失败: %v\n", err)
+				}
+			}
+			
+			// 统计
+			linkCount := 0
+			for _, r := range results {
+				linkCount += len(r.Links)
+			}
+			
+			fmt.Printf("  ✅ 完成: 爬取了 %d 个页面，发现 %d 个链接\n", len(results), linkCount)
+			
+			mu.Lock()
+			successCount++
+			mu.Unlock()
+			
+		}(i, url)
+	}
+	
+	// 等待所有任务完成
+	wg.Wait()
+	
+	elapsed := time.Since(startTime)
+	
+	// 打印总结
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("  批量扫描完成！\n")
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("  总URL数: %d\n", len(urls))
+	fmt.Printf("  成功: %d\n", successCount)
+	fmt.Printf("  失败: %d\n", failCount)
+	fmt.Printf("  耗时: %.2f秒\n", elapsed.Seconds())
+	fmt.Printf("  平均速度: %.2f URL/秒\n", float64(len(urls))/elapsed.Seconds())
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	fmt.Printf("[+] 所有结果已保存到当前目录（batch_*）\n")
 }

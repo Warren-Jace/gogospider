@@ -196,6 +196,22 @@ func parseLogLevel(level string) slog.Level {
 	}
 }
 
+// LoadSensitiveRules 加载外部敏感信息规则文件
+func (s *Spider) LoadSensitiveRules(filename string) error {
+	if s.sensitiveDetector == nil {
+		return fmt.Errorf("敏感信息检测器未初始化")
+	}
+	return s.sensitiveDetector.LoadRulesFromFile(filename)
+}
+
+// MergeSensitiveRules 合并外部敏感信息规则文件（不清空现有规则）
+func (s *Spider) MergeSensitiveRules(filename string) error {
+	if s.sensitiveDetector == nil {
+		return fmt.Errorf("敏感信息检测器未初始化")
+	}
+	return s.sensitiveDetector.MergeRulesFromFile(filename)
+}
+
 // Start 开始爬取
 func (s *Spider) Start(targetURL string) error {
 	// 确保资源清理（优化：防止泄漏）
@@ -500,14 +516,19 @@ func (s *Spider) addResult(result *Result) {
 			}
 		}
 
-		// 敏感信息检测
-		if s.sensitiveDetector != nil {
-			// 扫描HTML内容
-			findings := s.sensitiveDetector.Scan(result.HTMLContent, result.URL)
-			s.sensitiveFindings = append(s.sensitiveFindings, findings...)
+		// 敏感信息检测（根据配置决定是否启用）
+		if s.config.SensitiveDetectionSettings.Enabled && s.sensitiveDetector != nil {
+			findings := make([]*SensitiveInfo, 0)
+			
+			// 扫描HTML内容（根据配置）
+			if s.config.SensitiveDetectionSettings.ScanResponseBody {
+				bodyFindings := s.sensitiveDetector.Scan(result.HTMLContent, result.URL)
+				findings = append(findings, bodyFindings...)
+				s.sensitiveFindings = append(s.sensitiveFindings, bodyFindings...)
+			}
 
-			// 扫描HTTP头
-			if len(result.Headers) > 0 {
+			// 扫描HTTP头（根据配置）
+			if s.config.SensitiveDetectionSettings.ScanResponseHeaders && len(result.Headers) > 0 {
 				headerContent := ""
 				for key, value := range result.Headers {
 					headerContent += key + ": " + value + "\n"
@@ -517,18 +538,24 @@ func (s *Spider) addResult(result *Result) {
 				findings = append(findings, headerFindings...)
 			}
 
-			if len(findings) > 0 {
-				highCount := 0
-				for _, finding := range findings {
-					if finding.Severity == "HIGH" {
-						highCount++
+			// 实时输出（根据配置）
+			if s.config.SensitiveDetectionSettings.RealTimeOutput && len(findings) > 0 {
+				// 按严重级别过滤
+				filteredFindings := s.filterBySeverity(findings)
+				
+				if len(filteredFindings) > 0 {
+					highCount := 0
+					for _, finding := range filteredFindings {
+						if finding.Severity == "HIGH" {
+							highCount++
+						}
 					}
-				}
 
-				if highCount > 0 {
-					fmt.Printf("  [敏感信息] ⚠️  发现 %d 处高危敏感信息！\n", highCount)
-				} else if len(findings) > 0 {
-					fmt.Printf("  [敏感信息] 发现 %d 处敏感信息\n", len(findings))
+					if highCount > 0 {
+						fmt.Printf("  [敏感信息] ⚠️  发现 %d 处高危敏感信息！\n", highCount)
+					} else {
+						fmt.Printf("  [敏感信息] 发现 %d 处敏感信息\n", len(filteredFindings))
+					}
 				}
 			}
 		}
@@ -1854,6 +1881,153 @@ func (s *Spider) PrintURLPatternDedupReport() {
 	}
 }
 
+// SaveSensitiveInfoToFile 保存敏感信息到文件（独立输出，包含来源URL）
+func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	if s.sensitiveDetector == nil {
+		return fmt.Errorf("敏感信息检测器未初始化")
+	}
+	
+	findings := s.sensitiveDetector.GetFindings()
+	if len(findings) == 0 {
+		fmt.Println("[敏感信息] 未发现敏感信息，跳过文件保存")
+		return nil
+	}
+	
+	// 创建文件
+	file, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("创建敏感信息文件失败: %v", err)
+	}
+	defer file.Close()
+	
+	// 写入标题
+	file.WriteString("==========================================\n")
+	file.WriteString("   敏感信息泄露检测报告\n")
+	file.WriteString("==========================================\n\n")
+	
+	// 统计信息
+	stats := s.sensitiveDetector.GetStatistics()
+	file.WriteString(fmt.Sprintf("扫描页面数: %d\n", stats["total_scanned"]))
+	file.WriteString(fmt.Sprintf("发现总数: %d\n", stats["total_findings"]))
+	file.WriteString(fmt.Sprintf("  - 高危: %d\n", stats["high_severity"]))
+	file.WriteString(fmt.Sprintf("  - 中危: %d\n", stats["medium_severity"]))
+	file.WriteString(fmt.Sprintf("  - 低危: %d\n", stats["low_severity"]))
+	file.WriteString("\n==========================================\n\n")
+	
+	// 按严重程度分组
+	highFindings := s.sensitiveDetector.GetFindingsBySeverity("HIGH")
+	mediumFindings := s.sensitiveDetector.GetFindingsBySeverity("MEDIUM")
+	lowFindings := s.sensitiveDetector.GetFindingsBySeverity("LOW")
+	
+	// 写入高危发现
+	if len(highFindings) > 0 {
+		file.WriteString("【高危发现】\n")
+		file.WriteString(strings.Repeat("-", 60) + "\n\n")
+		for i, finding := range highFindings {
+			file.WriteString(fmt.Sprintf("[%d] %s\n", i+1, finding.Type))
+			file.WriteString(fmt.Sprintf("    来源URL: %s\n", finding.SourceURL))
+			file.WriteString(fmt.Sprintf("    位置: %s\n", finding.Location))
+			file.WriteString(fmt.Sprintf("    值: %s\n", finding.Value))
+			file.WriteString("\n")
+		}
+		file.WriteString("\n")
+	}
+	
+	// 写入中危发现
+	if len(mediumFindings) > 0 {
+		file.WriteString("【中危发现】\n")
+		file.WriteString(strings.Repeat("-", 60) + "\n\n")
+		for i, finding := range mediumFindings {
+			file.WriteString(fmt.Sprintf("[%d] %s\n", i+1, finding.Type))
+			file.WriteString(fmt.Sprintf("    来源URL: %s\n", finding.SourceURL))
+			file.WriteString(fmt.Sprintf("    位置: %s\n", finding.Location))
+			file.WriteString(fmt.Sprintf("    值: %s\n", finding.Value))
+			file.WriteString("\n")
+		}
+		file.WriteString("\n")
+	}
+	
+	// 写入低危发现
+	if len(lowFindings) > 0 {
+		file.WriteString("【低危发现】\n")
+		file.WriteString(strings.Repeat("-", 60) + "\n\n")
+		
+		// 按类型分组统计（低危数量可能很多，只显示统计）
+		typeCount := make(map[string]int)
+		typeExamples := make(map[string]*SensitiveInfo)
+		for _, finding := range lowFindings {
+			typeCount[finding.Type]++
+			if typeExamples[finding.Type] == nil {
+				typeExamples[finding.Type] = finding
+			}
+		}
+		
+		for findingType, count := range typeCount {
+			example := typeExamples[findingType]
+			file.WriteString(fmt.Sprintf("类型: %s (共 %d 个)\n", findingType, count))
+			file.WriteString(fmt.Sprintf("  示例来源: %s\n", example.SourceURL))
+			file.WriteString(fmt.Sprintf("  示例值: %s\n", example.Value))
+			file.WriteString("\n")
+		}
+	}
+	
+	// 打印统计
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("  ✅ 敏感信息报告已保存: %s\n", filepath)
+	fmt.Printf("  总发现: %d 个 (高危:%d, 中危:%d, 低危:%d)\n", 
+		stats["total_findings"], stats["high_severity"], stats["medium_severity"], stats["low_severity"])
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	
+	return nil
+}
+
+// SaveSensitiveInfoToJSON 保存敏感信息到JSON文件
+func (s *Spider) SaveSensitiveInfoToJSON(filepath string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	if s.sensitiveDetector == nil {
+		return fmt.Errorf("敏感信息检测器未初始化")
+	}
+	
+	findings := s.sensitiveDetector.GetFindings()
+	if len(findings) == 0 {
+		fmt.Println("[敏感信息] 未发现敏感信息，跳过JSON保存")
+		return nil
+	}
+	
+	// 构建JSON数据
+	report := map[string]interface{}{
+		"scan_time": time.Now().Format("2006-01-02 15:04:05"),
+		"target_domain": s.targetDomain,
+		"statistics": s.sensitiveDetector.GetStatistics(),
+		"findings": s.sensitiveDetector.ExportFindings(),
+	}
+	
+	// 转换为JSON
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("JSON编码失败: %v", err)
+	}
+	
+	// 写入文件
+	if err := os.WriteFile(filepath, data, 0644); err != nil {
+		return fmt.Errorf("写入JSON文件失败: %v", err)
+	}
+	
+	stats := s.sensitiveDetector.GetStatistics()
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("  ✅ 敏感信息JSON报告已保存: %s\n", filepath)
+	fmt.Printf("  总发现: %d 个 (高危:%d, 中危:%d, 低危:%d)\n", 
+		stats["total_findings"], stats["high_severity"], stats["medium_severity"], stats["low_severity"])
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	
+	return nil
+}
+
 // SaveStructureUniqueURLsToFile 保存结构化去重后的URL到文件
 // 该方法会识别路径变量（如 /product-123/ → /product-{num}/）和参数值变化
 // 只保存每个结构的代表性URL，避免保存大量相似URL
@@ -1948,6 +2122,33 @@ func (s *Spider) CollectAllURLsForStructureDedup() {
 			}
 		}
 	}
+}
+
+// filterBySeverity 按严重级别过滤敏感信息发现
+func (s *Spider) filterBySeverity(findings []*SensitiveInfo) []*SensitiveInfo {
+	minSeverity := s.config.SensitiveDetectionSettings.MinSeverity
+	
+	// 如果设置为LOW，返回所有发现
+	if minSeverity == "LOW" || minSeverity == "" {
+		return findings
+	}
+	
+	filtered := make([]*SensitiveInfo, 0)
+	for _, finding := range findings {
+		if minSeverity == "MEDIUM" {
+			// 只返回MEDIUM和HIGH
+			if finding.Severity == "MEDIUM" || finding.Severity == "HIGH" {
+				filtered = append(filtered, finding)
+			}
+		} else if minSeverity == "HIGH" {
+			// 只返回HIGH
+			if finding.Severity == "HIGH" {
+				filtered = append(filtered, finding)
+			}
+		}
+	}
+	
+	return filtered
 }
 
 // crawlWithPriorityQueue 🆕 使用优先级队列模式爬取（实验性）

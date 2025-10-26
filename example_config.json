@@ -132,6 +132,20 @@
     "input_format": "text",
     "output_format": "jsonl",
     "quiet": false
+  },
+  
+  "sensitive_detection_settings": {
+    "_comment": "v2.11 敏感信息检测配置 - 支持云存储密钥、第三方授权、账号密码检测",
+    "enabled": true,
+    "scan_response_body": true,
+    "scan_response_headers": true,
+    "min_severity": "LOW",
+    "enable_custom_patterns": false,
+    "custom_patterns": [],
+    "save_full_value": false,
+    "output_file": "",
+    "realtime_output": true,
+    "exclude_url_patterns": []
   }
 }
 

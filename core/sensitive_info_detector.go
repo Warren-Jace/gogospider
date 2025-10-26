@@ -1,7 +1,9 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -27,10 +29,24 @@ type SensitiveInfoDetector struct {
 
 // SensitivePattern 敏感信息模式
 type SensitivePattern struct {
-	Name     string
-	Pattern  *regexp.Regexp
-	Severity string
-	Mask     bool // 是否需要脱敏
+	Name        string
+	Pattern     *regexp.Regexp
+	Severity    string
+	Mask        bool   // 是否需要脱敏
+	Description string // 规则描述
+}
+
+// RuleConfig 外部规则配置文件结构
+type RuleConfig struct {
+	Rules map[string]RulePattern `json:"rules"`
+}
+
+// RulePattern 外部规则模式
+type RulePattern struct {
+	Pattern     string `json:"pattern"`
+	Severity    string `json:"severity"`
+	Mask        bool   `json:"mask"`
+	Description string `json:"description"`
 }
 
 // NewSensitiveInfoDetector 创建敏感信息检测器
@@ -209,6 +225,87 @@ func (sid *SensitiveInfoDetector) addPattern(name string, pattern *regexp.Regexp
 		Severity: severity,
 		Mask:     mask,
 	}
+}
+
+// LoadRulesFromFile 从外部JSON文件加载规则
+func (sid *SensitiveInfoDetector) LoadRulesFromFile(filename string) error {
+	// 读取文件
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("读取规则文件失败: %v", err)
+	}
+	
+	// 解析JSON
+	var config RuleConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("解析规则文件失败: %v", err)
+	}
+	
+	// 清空现有规则（可选）
+	sid.patterns = make(map[string]*SensitivePattern)
+	
+	// 加载新规则
+	loadedCount := 0
+	for name, rule := range config.Rules {
+		// 编译正则表达式
+		regex, err := regexp.Compile(rule.Pattern)
+		if err != nil {
+			fmt.Printf("警告: 规则 '%s' 的正则表达式编译失败: %v\n", name, err)
+			continue
+		}
+		
+		// 添加到检测器
+		sid.patterns[name] = &SensitivePattern{
+			Name:        name,
+			Pattern:     regex,
+			Severity:    rule.Severity,
+			Mask:        rule.Mask,
+			Description: rule.Description,
+		}
+		loadedCount++
+	}
+	
+	fmt.Printf("[敏感规则] 从 %s 加载了 %d 条规则\n", filename, loadedCount)
+	return nil
+}
+
+// MergeRulesFromFile 从外部JSON文件合并规则（不清空现有规则）
+func (sid *SensitiveInfoDetector) MergeRulesFromFile(filename string) error {
+	// 读取文件
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("读取规则文件失败: %v", err)
+	}
+	
+	// 解析JSON
+	var config RuleConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("解析规则文件失败: %v", err)
+	}
+	
+	// 合并规则
+	loadedCount := 0
+	for name, rule := range config.Rules {
+		// 编译正则表达式
+		regex, err := regexp.Compile(rule.Pattern)
+		if err != nil {
+			fmt.Printf("警告: 规则 '%s' 的正则表达式编译失败: %v\n", name, err)
+			continue
+		}
+		
+		// 添加到检测器（会覆盖同名规则）
+		sid.patterns[name] = &SensitivePattern{
+			Name:        name,
+			Pattern:     regex,
+			Severity:    rule.Severity,
+			Mask:        rule.Mask,
+			Description: rule.Description,
+		}
+		loadedCount++
+	}
+	
+	fmt.Printf("[敏感规则] 从 %s 合并了 %d 条规则，当前共 %d 条规则\n", filename, loadedCount, len(sid.patterns))
+	return nil
 }
 
 // Scan 扫描内容
