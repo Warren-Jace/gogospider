@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -295,6 +297,14 @@ func init() {
 
 
 func main() {
+	// ✅ 修复1: 设置控制台输出编码为UTF-8（修复PowerShell重定向乱码）
+	// Windows PowerShell默认使用GBK编码，这里强制使用UTF-8
+	// 这样 .\spider.exe ... >> log.log 时中文就不会乱码了
+	if runtime.GOOS == "windows" {
+		// 设置代码页为UTF-8
+		exec.Command("cmd", "/c", "chcp 65001 >nul").Run()
+	}
+	
 	// 🔧 优化：添加panic恢复机制
 	defer func() {
 		if r := recover(); r != nil {
@@ -580,16 +590,6 @@ func main() {
 		log.Printf("保存去重URL失败: %v", err)
 	}
 	
-	// 🆕 结构化去重: 保存结构化去重后的URL（识别路径变量+参数值）
-	// 先收集所有URL到结构化去重器
-	spider.CollectAllURLsForStructureDedup()
-	
-	// 保存结构化去重后的URL
-	structureUniqueFile := baseFilename + "_structure_unique_urls.txt"
-	if err := spider.SaveStructureUniqueURLsToFile(structureUniqueFile); err != nil {
-		log.Printf("保存结构化去重URL失败: %v", err)
-	}
-	
 	// 🆕 v2.11: 保存敏感信息到独立文件
 	if enableSensitiveDetection {
 		// 保存文本格式
@@ -612,6 +612,16 @@ func main() {
 		}
 	}
 	
+	// 🆕 新增：保存排除的URL（超出范围和静态资源）
+	if err := saveExcludedURLs(spider, baseFilename); err != nil {
+		log.Printf("保存排除的URL失败: %v", err)
+	}
+	
+	// 🆕 新增：保存JS和CSS文件列表
+	if err := saveJSAndCSSFiles(results, baseFilename); err != nil {
+		log.Printf("保存JS/CSS文件列表失败: %v", err)
+	}
+	
 	// 打印统计信息
 	if !simpleMode {
 		printStats(results, elapsed)
@@ -621,6 +631,12 @@ func main() {
 		
 		// 🆕 v3.2: 打印登录墙检测报告
 		spider.PrintLoginWallReport()
+		
+		// 🆕 v3.5: 打印URL过滤报告（新增）
+		spider.PrintURLFilterReport()
+		
+		// 🆕 v3.5: 打印POST请求检测报告（新增）
+		spider.PrintPOSTDetectionReport()
 		
 		// v2.9: 打印URL模式去重报告
 		spider.PrintURLPatternDedupReport()
@@ -842,24 +858,10 @@ func saveAllURLs(results []*core.Result, baseFilename string) error {
 		return fmt.Errorf("保存全部URL失败: %v", err)
 	}
 	
-	// 保存带参数的URL（方便参数Fuzz）
-	if len(paramURLs) > 0 {
-		if err := writeURLsToFile(paramURLs, baseFilename+"_params.txt"); err != nil {
-			log.Printf("警告: 保存参数URL失败: %v", err)
-		}
-	}
-	
 	// 保存API URL（方便API测试）
 	if len(apiURLs) > 0 {
 		if err := writeURLsToFile(apiURLs, baseFilename+"_apis.txt"); err != nil {
 			log.Printf("警告: 保存API URL失败: %v", err)
-		}
-	}
-	
-	// 保存表单URL（方便表单测试）
-	if len(formURLs) > 0 {
-		if err := writeURLsToFile(formURLs, baseFilename+"_forms.txt"); err != nil {
-			log.Printf("警告: 保存表单URL失败: %v", err)
 		}
 	}
 	
@@ -883,14 +885,8 @@ func saveAllURLs(results []*core.Result, baseFilename string) error {
 	// 打印保存统计
 	fmt.Printf("\n[+] URL保存完成:\n")
 	fmt.Printf("  - %s_all_urls.txt  : %d 个URL（全部）\n", baseFilename, len(allURLs))
-	if len(paramURLs) > 0 {
-		fmt.Printf("  - %s_params.txt    : %d 个URL（带参数）\n", baseFilename, len(paramURLs))
-	}
 	if len(apiURLs) > 0 {
 		fmt.Printf("  - %s_apis.txt      : %d 个URL（API接口）\n", baseFilename, len(apiURLs))
-	}
-	if len(formURLs) > 0 {
-		fmt.Printf("  - %s_forms.txt     : %d 个URL（表单）\n", baseFilename, len(formURLs))
 	}
 	if len(postRequests) > 0 {
 		fmt.Printf("  - %s_post_requests.txt : %d 个POST请求\n", baseFilename, len(postRequests))
@@ -1404,4 +1400,195 @@ func handleBatchScanMode() {
 	fmt.Printf("  平均速度: %.2f URL/秒\n", float64(len(urls))/elapsed.Seconds())
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 	fmt.Printf("[+] 所有结果已保存到当前目录（batch_*）\n")
+}
+
+// saveExcludedURLs 保存超出范围和静态资源URL
+func saveExcludedURLs(spider *core.Spider, baseFilename string) error {
+	file, err := os.Create(baseFilename + "_excluded.txt")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	
+	totalCount := 0
+	
+	// 文件头
+	writer.WriteString("═══════════════════════════════════════════════════════\n")
+	writer.WriteString("  GogoSpider - 排除的URL列表\n")
+	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
+	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
+	
+	// 1. 外部域名URL
+	externalLinks := spider.GetExternalLinks()
+	if len(externalLinks) > 0 {
+		writer.WriteString(fmt.Sprintf("【外部域名URL】 共 %d 个\n", len(externalLinks)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, link := range externalLinks {
+			writer.WriteString(link + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(externalLinks)
+	}
+	
+	// 2. 静态资源
+	staticResources := spider.GetStaticResources()
+	
+	if len(staticResources.Images) > 0 {
+		writer.WriteString(fmt.Sprintf("【图片资源】 共 %d 个\n", len(staticResources.Images)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, img := range staticResources.Images {
+			writer.WriteString(img + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(staticResources.Images)
+	}
+	
+	if len(staticResources.Videos) > 0 {
+		writer.WriteString(fmt.Sprintf("【视频资源】 共 %d 个\n", len(staticResources.Videos)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, video := range staticResources.Videos {
+			writer.WriteString(video + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(staticResources.Videos)
+	}
+	
+	if len(staticResources.Audios) > 0 {
+		writer.WriteString(fmt.Sprintf("【音频资源】 共 %d 个\n", len(staticResources.Audios)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, audio := range staticResources.Audios {
+			writer.WriteString(audio + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(staticResources.Audios)
+	}
+	
+	if len(staticResources.Fonts) > 0 {
+		writer.WriteString(fmt.Sprintf("【字体资源】 共 %d 个\n", len(staticResources.Fonts)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, font := range staticResources.Fonts {
+			writer.WriteString(font + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(staticResources.Fonts)
+	}
+	
+	if len(staticResources.Documents) > 0 {
+		writer.WriteString(fmt.Sprintf("【文档资源】 共 %d 个\n", len(staticResources.Documents)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, doc := range staticResources.Documents {
+			writer.WriteString(doc + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(staticResources.Documents)
+	}
+	
+	if len(staticResources.Archives) > 0 {
+		writer.WriteString(fmt.Sprintf("【压缩包资源】 共 %d 个\n", len(staticResources.Archives)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, archive := range staticResources.Archives {
+			writer.WriteString(archive + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(staticResources.Archives)
+	}
+	
+	// 3. 黑名单URL
+	blacklistedURLs := spider.GetBlacklistedURLs()
+	if len(blacklistedURLs) > 0 {
+		writer.WriteString(fmt.Sprintf("【黑名单URL】 共 %d 个\n", len(blacklistedURLs)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, url := range blacklistedURLs {
+			writer.WriteString(url + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(blacklistedURLs)
+	}
+	
+	// 4. 特殊协议链接
+	specialLinks := spider.GetSpecialProtocolLinks()
+	
+	if len(specialLinks.Mailto) > 0 {
+		writer.WriteString(fmt.Sprintf("【Mailto链接】 共 %d 个\n", len(specialLinks.Mailto)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, link := range specialLinks.Mailto {
+			writer.WriteString(link + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(specialLinks.Mailto)
+	}
+	
+	if len(specialLinks.Tel) > 0 {
+		writer.WriteString(fmt.Sprintf("【电话链接】 共 %d 个\n", len(specialLinks.Tel)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, link := range specialLinks.Tel {
+			writer.WriteString(link + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(specialLinks.Tel)
+	}
+	
+	if len(specialLinks.WebSocket) > 0 {
+		writer.WriteString(fmt.Sprintf("【WebSocket链接】 共 %d 个\n", len(specialLinks.WebSocket)))
+		writer.WriteString(strings.Repeat("-", 55) + "\n")
+		for _, link := range specialLinks.WebSocket {
+			writer.WriteString(link + "\n")
+		}
+		writer.WriteString("\n\n")
+		totalCount += len(specialLinks.WebSocket)
+	}
+	
+	// 总计
+	writer.WriteString(strings.Repeat("═", 55) + "\n")
+	writer.WriteString(fmt.Sprintf("总计：%d 个排除的URL\n", totalCount))
+	writer.WriteString(strings.Repeat("═", 55) + "\n")
+	
+	if totalCount > 0 {
+		fmt.Printf("  - %s_excluded.txt : %d 个排除的URL\n", baseFilename, totalCount)
+	}
+	return nil
+}
+
+// saveJSAndCSSFiles 保存JS和CSS文件列表
+func saveJSAndCSSFiles(results []*core.Result, baseFilename string) error {
+	jsFiles := make(map[string]bool)
+	cssFiles := make(map[string]bool)
+	
+	for _, result := range results {
+		for _, link := range result.Links {
+			lowerLink := strings.ToLower(link)
+			if strings.HasSuffix(lowerLink, ".js") || 
+			   strings.HasSuffix(lowerLink, ".mjs") ||
+			   strings.HasSuffix(lowerLink, ".jsx") {
+				jsFiles[link] = true
+			} else if strings.HasSuffix(lowerLink, ".css") ||
+			          strings.HasSuffix(lowerLink, ".scss") ||
+			          strings.HasSuffix(lowerLink, ".sass") {
+				cssFiles[link] = true
+			}
+		}
+	}
+	
+	// 保存JS文件
+	if len(jsFiles) > 0 {
+		if err := writeURLsToFile(jsFiles, baseFilename+"_js_files.txt"); err != nil {
+			log.Printf("警告: 保存JS文件列表失败: %v", err)
+		} else {
+			fmt.Printf("  - %s_js_files.txt : %d 个JS文件\n", baseFilename, len(jsFiles))
+		}
+	}
+	
+	// 保存CSS文件
+	if len(cssFiles) > 0 {
+		if err := writeURLsToFile(cssFiles, baseFilename+"_css_files.txt"); err != nil {
+			log.Printf("警告: 保存CSS文件列表失败: %v", err)
+		} else {
+			fmt.Printf("  - %s_css_files.txt : %d 个CSS文件\n", baseFilename, len(cssFiles))
+		}
+	}
+	
+	return nil
 }

@@ -17,25 +17,6 @@ import (
 	"spider-golang/config"
 )
 
-// StaticResources 静态资源分类
-type StaticResources struct {
-	Images    []string // 图片资源
-	Videos    []string // 视频资源
-	Audios    []string // 音频资源
-	Fonts     []string // 字体资源
-	Documents []string // 文档资源
-	Archives  []string // 压缩包资源
-}
-
-// SpecialLinks 特殊协议链接
-type SpecialLinks struct {
-	Mailto    []string // mailto:链接
-	Tel       []string // tel:链接
-	WebSocket []string // ws/wss:链接
-	FTP       []string // ftp:链接
-	Data      []string // data:链接
-}
-
 // Spider 主爬虫协调器
 type Spider struct {
 	config              *config.Config
@@ -96,12 +77,6 @@ type Spider struct {
 	crossDomainJS     []string         // 记录跨域JS发现的URL
 	detectedTechs     []*TechInfo      // 检测到的技术栈
 	sensitiveFindings []*SensitiveInfo // 敏感信息发现
-	
-	// 🆕 新增：完整的URL分类收集
-	staticResources   StaticResources  // 静态资源分类
-	blacklistedURLs   []string         // 黑名单URL
-	specialLinks      SpecialLinks     // 特殊协议链接
-	
 	mutex             sync.Mutex
 	targetDomain      string          // 目标域名
 	visitedURLs       map[string]bool // 已访问URL
@@ -311,10 +286,6 @@ func (s *Spider) Start(targetURL string) error {
 	
 	// 初始化资源分类器
 	s.resourceClassifier = NewResourceClassifier(s.targetDomain)
-	
-	// 🆕 v3.7: 为爬虫注入Spider引用（用于实时记录URL）
-	s.staticCrawler.SetSpider(s)
-	s.dynamicCrawler.SetSpider(s)
 	
 	// 🆕 初始化优先级调度器（如果配置启用）
 	// 可以通过配置文件控制是否使用优先级队列模式
@@ -838,86 +809,6 @@ func (s *Spider) GetResults() []*Result {
 	return results
 }
 
-// GetExternalLinks 获取外部链接列表
-func (s *Spider) GetExternalLinks() []string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.externalLinks
-}
-
-// GetStaticResources 获取静态资源列表
-func (s *Spider) GetStaticResources() StaticResources {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.staticResources
-}
-
-// GetBlacklistedURLs 获取黑名单URL列表
-func (s *Spider) GetBlacklistedURLs() []string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.blacklistedURLs
-}
-
-// GetSpecialProtocolLinks 获取特殊协议链接
-func (s *Spider) GetSpecialProtocolLinks() SpecialLinks {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.specialLinks
-}
-
-// RecordStaticResource 记录静态资源
-func (s *Spider) RecordStaticResource(url string, resourceType ResourceType) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	
-	switch resourceType {
-	case ResourceTypeImage:
-		s.staticResources.Images = append(s.staticResources.Images, url)
-	case ResourceTypeVideo:
-		s.staticResources.Videos = append(s.staticResources.Videos, url)
-	case ResourceTypeAudio:
-		s.staticResources.Audios = append(s.staticResources.Audios, url)
-	case ResourceTypeFont:
-		s.staticResources.Fonts = append(s.staticResources.Fonts, url)
-	case ResourceTypeDocument:
-		s.staticResources.Documents = append(s.staticResources.Documents, url)
-	case ResourceTypeArchive:
-		s.staticResources.Archives = append(s.staticResources.Archives, url)
-	}
-}
-
-// RecordSpecialLink 记录特殊协议链接
-func (s *Spider) RecordSpecialLink(url string, protocol string) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	
-	switch protocol {
-	case "mailto":
-		s.specialLinks.Mailto = append(s.specialLinks.Mailto, url)
-	case "tel":
-		s.specialLinks.Tel = append(s.specialLinks.Tel, url)
-	case "ws", "wss":
-		s.specialLinks.WebSocket = append(s.specialLinks.WebSocket, url)
-	case "ftp":
-		s.specialLinks.FTP = append(s.specialLinks.FTP, url)
-	case "data":
-		s.specialLinks.Data = append(s.specialLinks.Data, url)
-	}
-}
-
-// RecordBlacklistedURL 记录黑名单URL
-func (s *Spider) RecordBlacklistedURL(url string) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.blacklistedURLs = append(s.blacklistedURLs, url)
-}
-
-// GetResourceClassifier 获取资源分类器（实现SpiderRecorder接口）
-func (s *Spider) GetResourceClassifier() *ResourceClassifier {
-	return s.resourceClassifier
-}
-
 // processParams 已废弃（参数爆破功能已移除）
 // 保留定义以避免编译错误，但不再使用
 func (s *Spider) processParams(rawURL string) []string {
@@ -1278,34 +1169,27 @@ func (s *Spider) processCrossDomainJS() {
 			s.crossDomainJS = append(s.crossDomainJS, urls...)
 			s.mutex.Unlock()
 
-		// 添加到爬取队列（如果启用递归爬取）
-		if s.config.DepthSettings.MaxDepth > 1 {
-			addedCount := 0
-			// filteredCount := 0  // 🔥 禁用过滤计数
-			for _, u := range urls {
-				// 🔥🔥🔥 关键修复：禁用URL验证器过滤 🔥🔥🔥
-				// 原因：从14074个JS提取的URL中，只有110个通过验证(0.8%)
-				//      被过滤的13964个URL(99.2%)完全丢失，用户反馈需要保存所有URL
-				// 修复：临时禁用验证器，保存所有从JS提取的URL
-				//
-				// if s.urlValidator != nil && !s.urlValidator.IsValidBusinessURL(u) {
-				// 	filteredCount++
-				// 	continue
-				// }
-				
-				// 添加到结果中（作为发现的链接）
-				if len(s.results) > 0 {
-					s.results[0].Links = append(s.results[0].Links, u)
-					addedCount++
+			// 添加到爬取队列（如果启用递归爬取）
+			if s.config.DepthSettings.MaxDepth > 1 {
+				addedCount := 0
+				filteredCount := 0
+				for _, u := range urls {
+					// 🆕 v3.5: 使用URL验证器过滤无效URL
+					if s.urlValidator != nil && !s.urlValidator.IsValidBusinessURL(u) {
+						filteredCount++
+						continue
+					}
+					
+					// 添加到结果中（作为发现的链接）
+					if len(s.results) > 0 {
+						s.results[0].Links = append(s.results[0].Links, u)
+						addedCount++
+					}
+				}
+				if filteredCount > 0 {
+					fmt.Printf("    [跨域JS过滤] 过滤了 %d 个无效URL，保留 %d 个有效URL\n", filteredCount, addedCount)
 				}
 			}
-			// if filteredCount > 0 {
-			// 	fmt.Printf("    [跨域JS过滤] 过滤了 %d 个无效URL，保留 %d 个有效URL\n", filteredCount, addedCount)
-			// }
-			if addedCount > 0 {
-				fmt.Printf("    [跨域JS] ✅ 添加了 %d 个URL到结果（已禁用过滤，保存所有URL）\n", addedCount)
-			}
-		}
 		}
 	}
 

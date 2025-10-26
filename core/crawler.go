@@ -73,6 +73,17 @@ type Crawler interface {
 	
 	// Stop 停止爬取
 	Stop()
+	
+	// SetSpider 设置Spider引用（用于记录URL）
+	SetSpider(spider SpiderRecorder)
+}
+
+// SpiderRecorder Spider记录接口（避免循环引用）
+type SpiderRecorder interface {
+	RecordStaticResource(url string, resourceType ResourceType)
+	RecordSpecialLink(url string, protocol string)
+	RecordBlacklistedURL(url string)
+	GetResourceClassifier() *ResourceClassifier
 }
 
 // StaticCrawler 静态爬虫接口

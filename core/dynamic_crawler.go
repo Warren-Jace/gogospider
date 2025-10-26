@@ -20,6 +20,7 @@ type DynamicCrawlerImpl struct {
 	ajaxInterceptor *AjaxInterceptor // AJAX拦截器
 	enableEvents    bool             // 是否启用事件触发
 	enableAjax      bool             // 是否启用AJAX拦截
+	spider          SpiderRecorder   // Spider引用（v3.7新增，用于实时记录URL）
 }
 
 // NewDynamicCrawler 创建动态爬虫实例
@@ -52,6 +53,11 @@ func (d *DynamicCrawlerImpl) Configure(config *config.Config) {
 			d.timeout = 120 * time.Second // 优化：最大120秒
 		}
 	}
+}
+
+// SetSpider 设置Spider引用（v3.7新增，实现Crawler接口）
+func (d *DynamicCrawlerImpl) SetSpider(spider SpiderRecorder) {
+	d.spider = spider
 }
 
 // Crawl 执行动态爬取
@@ -270,23 +276,27 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 
 	if err == nil {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个链接\n", len(links))
-		// 检查域名范围限制
+		// ✅ 修复3: 所有链接都添加到result.Links（无论域名范围）
+		// 这样可以确保详细报告包含所有发现的链接
+		result.Links = append(result.Links, links...)
+		
+		// 检查域名范围限制（仅用于后续过滤）
 		if d.config != nil && d.config.StrategySettings.DomainScope != "" {
+			externalCount := 0
 			for _, link := range links {
 				parsedLink, err := url.Parse(link)
 				if err != nil {
 					continue
 				}
 
-				// 检查是否在允许的域名范围内
-				if strings.Contains(parsedLink.Host, d.config.StrategySettings.DomainScope) {
-					result.Links = append(result.Links, link)
-				} else {
-					fmt.Printf("发现外部链接（已记录但不爬取）: %s\n", link)
+				// 统计外部链接数量
+				if !strings.Contains(parsedLink.Host, d.config.StrategySettings.DomainScope) {
+					externalCount++
 				}
 			}
-		} else {
-			result.Links = append(result.Links, links...)
+			if externalCount > 0 {
+				fmt.Printf("  [动态爬虫] 发现 %d 个外部链接（已记录）\n", externalCount)
+			}
 		}
 	} else {
 		fmt.Printf("  [动态爬虫] ⚠️  提取链接超时: %v\n", err)
@@ -303,21 +313,28 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 
 	if err == nil {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个资源\n", len(assets))
-		// 检查域名范围限制
+		// ✅ 修复4: 所有资源都添加到result.Assets和result.Links
+		result.Assets = append(result.Assets, assets...)
+		// 资源也添加到Links中，确保完整记录
+		result.Links = append(result.Links, assets...)
+		
+		// 检查域名范围限制（仅用于统计）
 		if d.config != nil && d.config.StrategySettings.DomainScope != "" {
+			externalAssets := 0
 			for _, asset := range assets {
 				parsedAsset, err := url.Parse(asset)
 				if err != nil {
 					continue
 				}
 
-				// 检查是否在允许的域名范围内
-				if strings.Contains(parsedAsset.Host, d.config.StrategySettings.DomainScope) {
-					result.Assets = append(result.Assets, asset)
+				// 统计外部资源数量
+				if !strings.Contains(parsedAsset.Host, d.config.StrategySettings.DomainScope) {
+					externalAssets++
 				}
 			}
-		} else {
-			result.Assets = append(result.Assets, assets...)
+			if externalAssets > 0 {
+				fmt.Printf("  [动态爬虫] 发现 %d 个外部资源（已记录）\n", externalAssets)
+			}
 		}
 	} else {
 		fmt.Printf("  [动态爬虫] ⚠️  提取资源超时: %v\n", err)
@@ -924,3 +941,5 @@ func getBool(m map[string]interface{}, key string) bool {
 	}
 	return false
 }
+
+

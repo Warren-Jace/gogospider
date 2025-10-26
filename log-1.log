@@ -1,0 +1,504 @@
+
+鈺斺晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?鈺?                                                              鈺?鈺?  鈻堚枅鈻堚枅鈻堚枅鈻堚晽鈻堚枅鈻堚枅鈻堚枅鈺?鈻堚枅鈺椻枅鈻堚枅鈻堚枅鈻堚晽 鈻堚枅鈻堚枅鈻堚枅鈻堚晽鈻堚枅鈻堚枅鈻堚枅鈺?               鈺?鈺?  鈻堚枅鈺斺晲鈺愨晲鈺愨暆鈻堚枅鈺斺晲鈺愨枅鈻堚晽鈻堚枅鈺戔枅鈻堚晹鈺愨晲鈻堚枅鈺椻枅鈻堚晹鈺愨晲鈺愨晲鈺濃枅鈻堚晹鈺愨晲鈻堚枅鈺?              鈺?鈺?  鈻堚枅鈻堚枅鈻堚枅鈻堚晽鈻堚枅鈻堚枅鈻堚枅鈺斺暆鈻堚枅鈺戔枅鈻堚晳  鈻堚枅鈺戔枅鈻堚枅鈻堚枅鈺? 鈻堚枅鈻堚枅鈻堚枅鈺斺暆               鈺?鈺?  鈺氣晲鈺愨晲鈺愨枅鈻堚晳鈻堚枅鈺斺晲鈺愨晲鈺?鈻堚枅鈺戔枅鈻堚晳  鈻堚枅鈺戔枅鈻堚晹鈺愨晲鈺? 鈻堚枅鈺斺晲鈺愨枅鈻堚晽               鈺?鈺?  鈻堚枅鈻堚枅鈻堚枅鈻堚晳鈻堚枅鈺?    鈻堚枅鈺戔枅鈻堚枅鈻堚枅鈻堚晹鈺濃枅鈻堚枅鈻堚枅鈻堚枅鈺椻枅鈻堚晳  鈻堚枅鈺?              鈺?鈺?  鈺氣晲鈺愨晲鈺愨晲鈺愨暆鈺氣晲鈺?    鈺氣晲鈺濃暁鈺愨晲鈺愨晲鈺愨暆 鈺氣晲鈺愨晲鈺愨晲鈺愨暆鈺氣晲鈺? 鈺氣晲鈺?              鈺?鈺?                                                              鈺?鈺?          GogoSpider - 鏅鸿兘Web鐖櫕绯荤粺                       鈺?鈺?    Version 3.4 - Hybrid Strategy with Adaptive Learning     鈺?鈺?                                                              鈺?鈺氣晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+[*] 宸插姞杞介厤缃枃浠? .\config.json
+[鏁忔劅淇℃伅] 绛夊緟鍔犺浇澶栭儴瑙勫垯鏂囦欢...
+鈿狅笍  璀﹀憡: 鏁忔劅淇℃伅妫€娴嬪凡鍚敤锛屼絾鏈寚瀹氳鍒欐枃浠?馃挕 璇蜂娇鐢?-sensitive-rules 鍙傛暟鎸囧畾瑙勫垯鏂囦欢
+    绀轰緥: -sensitive-rules sensitive_rules_standard.json
+
+[*] 寮€濮嬬埇鍙? http://testphp.vulnweb.com/
+[*] 鏈€澶ф繁搴? 5
+[*] 闈欐€佺埇铏? true
+[*] 鍔ㄦ€佺埇铏? true
+[*] 绾埇铏ā寮? 涓撴敞URL鍙戠幇锛堝凡绂佺敤鍙傛暟鐖嗙牬锛?
+{"timestamp":"2025-10-26 23:36:07","level":"INFO","msg":"寮€濮嬬埇鍙?,"url":"http://testphp.vulnweb.com/","target_domain":"testphp.vulnweb.com","max_depth":5,"version":"v2.6"}
+
+銆愬凡鍚敤鍔熻兘銆慡pider Ultimate v2.6
+  鉁?璺ㄥ煙JS鍒嗘瀽锛堟敮鎸?0+涓狢DN锛?  鉁?鏅鸿兘琛ㄥ崟濉厖锛堟敮鎸?0+绉嶅瓧娈电被鍨嬶級
+  鉁?浣滅敤鍩熺簿纭帶鍒讹紙10涓繃婊ょ淮搴︼級
+  鉁?鎬ц兘浼樺寲锛堝璞℃睜+杩炴帴姹狅級
+  鉁?鎶€鏈爤璇嗗埆锛?5+绉嶆鏋讹級
+  鉁?鏁忔劅淇℃伅妫€娴嬶紙30+绉嶆ā寮忥級
+  鉁?JavaScript浜嬩欢瑙﹀彂锛堢偣鍑汇€佹偓鍋溿€佽緭鍏ャ€佹粴鍔級
+  鉁?AJAX璇锋眰鎷︽埅锛堝姩鎬乁RL鎹曡幏锛?  鉁?澧炲己JS鍒嗘瀽锛堝璞°€佽矾鐢便€侀厤缃級
+  鉁?闈欐€佽祫婧愬垎绫伙紙7绉嶇被鍨嬶級
+  鉁?IP鍦板潃妫€娴嬶紙鍐呯綉娉勯湶璇嗗埆锛?  鉁?URL浼樺厛绾ф帓搴忥紙鏅鸿兘鐖彇绛栫暐锛?  鉁?缁撴瀯鍖栨棩蹇楃郴缁燂紙鍒嗙骇銆佹枃浠躲€丣SON锛夝焼?
+鐖彇閰嶇疆:
+  娣卞害: 5 灞?| 骞跺彂: 20-30 | 鏃ュ織: INFO
+
+{"timestamp":"2025-10-26 23:36:07","level":"INFO","msg":"寮€濮嬬埇鍙杝itemap鍜宺obots.txt","target":"http://testphp.vulnweb.com/"}
+{"timestamp":"2025-10-26 23:36:53","level":"INFO","msg":"sitemap鍜宺obots.txt鐖彇瀹屾垚","sitemap_urls":0,"disallow_paths":0,"allow_paths":0,"extra_sitemaps":0}
+{"timestamp":"2025-10-26 23:36:53","level":"INFO","msg":"璺宠繃闅愯棌璺緞鎵弿锛圗nableCommonPathScan=false锛?}
+{"timestamp":"2025-10-26 23:36:53","level":"INFO","msg":"浣跨敤闈欐€佺埇铏?,"url":"http://testphp.vulnweb.com/"}
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/
+[闈欐€佺埇铏玗 鍙戠幇 25 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 25涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 2 涓摼鎺?
+{"timestamp":"2025-10-26 23:37:00","level":"INFO","msg":"妫€娴嬪埌POST璇锋眰","page_url":"http://testphp.vulnweb.com/","post_count":1}
+  [鎶€鏈爤] 妫€娴嬪埌: PHP 5.6.40, Nginx 1.19.0
+{"timestamp":"2025-10-26 23:37:00","level":"INFO","msg":"闈欐€佺埇铏畬鎴?,"url":"http://testphp.vulnweb.com/","links":2,"assets":2,"forms":1,"apis":0}
+{"timestamp":"2025-10-26 23:37:00","level":"INFO","msg":"浣跨敤鍔ㄦ€佺埇铏?,"url":"http://testphp.vulnweb.com/","mode":"ajax_intercept"}
+  [鍔ㄦ€佺埇铏玗 AJAX鎷︽埅鍣ㄥ凡鍚姩
+  [鍔ㄦ€佺埇铏玗 浠庨〉闈㈡彁鍙栧埌 20 涓摼鎺?  [鍔ㄦ€佺埇铏玗 浠庨〉闈㈡彁鍙栧埌 2 涓祫婧?  [鍔ㄦ€佺埇铏玗 浠庨〉闈㈡彁鍙栧埌 1 涓〃鍗?  [POST琛ㄥ崟] http://testphp.vulnweb.com/search.php?test=query
+    鍙傛暟: 1 涓瓧娈?    - searchFor=test_value
+  [琛ㄥ崟鍒嗘瀽] 鎻愪氦浜?1 涓狿OST琛ㄥ崟
+  [鍔ㄦ€佺埇铏玗 鍚姩JavaScript浜嬩欢瑙﹀彂...
+  [浜嬩欢瑙﹀彂] 寮€濮嬭嚜鍔ㄨЕ鍙戦〉闈簨浠?..
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/categories.php
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/artists.php
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/AJAX/index.php
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/search.php?test=query
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/1.jpg&size=160
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/2.jpg&size=160
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/3.jpg&size=160
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/4.jpg&size=160
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/5.jpg&size=160
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/6.jpg&size=160
+  [AJAX鎷︽埅] 鍙戠幇AJAX璇锋眰: http://testphp.vulnweb.com/showimage.php?file=./pictures/7.jpg&size=160
+  [浜嬩欢瑙﹀彂] 瑙﹀彂浜?25 涓偣鍑讳簨浠?  [浜嬩欢瑙﹀彂] 瑙﹀彂浜?50 涓偓鍋滀簨浠?  [浜嬩欢瑙﹀彂] 瑙﹀彂浜?1 涓緭鍏ヤ簨浠?  [浜嬩欢瑙﹀彂] 妫€娴嬪埌DOM鍙樺寲
+  [浜嬩欢瑙﹀彂] 瀹屾垚锛佸彂鐜?50 涓柊URL, 1 涓柊琛ㄥ崟
+  [浜嬩欢瑙﹀彂] 鍙戠幇 50 涓柊URL
+  [浜嬩欢瑙﹀彂] 鍙戠幇 1 涓柊琛ㄥ崟
+  [浜嬩欢瑙﹀彂] 鎵ц浜?1 娆℃粴鍔ㄥ姞杞?  [AJAX鎷︽埅] 鎹曡幏鍒?11 涓狝JAX璇锋眰URL
+  [AJAX鎷︽埅] 缁熻: map[total_ajax_requests:11]
+{"timestamp":"2025-10-26 23:37:17","level":"INFO","msg":"妫€娴嬪埌POST璇锋眰","page_url":"http://testphp.vulnweb.com/","post_count":1}
+  [DOM鐩镐技搴 鍙戠幇鐩镐技椤甸潰锛佺浉浼煎害: 100.0%, 鐩镐技浜? http://testphp.vulnweb.com/
+  [DOM鐩镐技搴 鍘熷洜: 缁撴瀯鍝堝笇瀹屽叏鍖归厤
+  [DOM鐩镐技搴 鉁?璺宠繃閲嶅鐖彇锛岃妭鐪佽祫婧?{"timestamp":"2025-10-26 23:37:17","level":"INFO","msg":"鍔ㄦ€佺埇铏畬鎴?,"url":"http://testphp.vulnweb.com/","links":78,"assets":2,"forms":2,"apis":0}
+
+寮€濮嬪垎鏋愯法鍩烰S鏂囦欢...
+鏈彂鐜伴渶瑕佸垎鏋愮殑璺ㄥ煙JS鏂囦欢
+{"timestamp":"2025-10-26 23:37:17","level":"INFO","msg":"鑷€傚簲浼樺厛绾у涔犲櫒宸插惎鐢?,"learning_rate":0.15}
+{"timestamp":"2025-10-26 23:37:17","level":"INFO","msg":"浣跨敤娣峰悎璋冨害绛栫暐","algorithm":"HYBRID"}
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+銆愭贩鍚堣皟搴︾瓥鐣ャ€態FS妗嗘灦 + 鏅鸿兘浼樺厛绾ф帓搴?鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+鉁?缁撳悎BFS鍏ㄩ潰鎬у拰浼樺厛绾ф櫤鑳芥€?鉁?鑷€傚簲瀛︿範锛岃秺鐖秺鑱槑
+
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?銆愮 2 灞傜埇鍙栥€戞贩鍚堢瓥鐣ユā寮?| 鏈€澶ф繁搴? 5
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?  鍙戠幇 13 涓閮ㄩ摼鎺ワ紙宸茶褰曚絾涓嶇埇鍙栵級
+  [URL妯″紡鍘婚噸] 鏈眰璺宠繃 20 涓噸澶嶆ā寮廢RL
+
+  [娣峰悎鍐崇瓥] 鏈眰浼樺厛绾OP3锛圔FS妗嗘灦 + 鏅鸿兘鎺掑簭锛?
+    1. [浼樺厛绾?16.00] http://testphp.vulnweb.com/login.php
+    2. [浼樺厛绾?12.00] http://testphp.vulnweb.com/userinfo.php
+    3. [浼樺厛绾?9.50] http://testphp.vulnweb.com/listproducts.php?cat=2
+    ... 杩樻湁 16 涓猆RL鎸変紭鍏堢骇鎺掑簭
+鏀堕泦鍒?19 涓€欓€塙RL
+
+  [浼樺厛绾OP5] 鏈眰鏈€楂樹环鍊糢RL:
+    1. [浼樺厛绾? 16.00] http://testphp.vulnweb.com/login.php
+    2. [浼樺厛绾? 12.00] http://testphp.vulnweb.com/userinfo.php
+    3. [浼樺厛绾? 9.50] http://testphp.vulnweb.com/listproducts.php?cat=2
+    4. [浼樺厛绾? 9.50] http://testphp.vulnweb.com/search.php?test=query
+    5. [浼樺厛绾? 9.50] http://testphp.vulnweb.com/product.php?pic=3
+    ... 杩樻湁 14 涓猆RL鎸変紭鍏堢骇鎺掑簭
+
+涓篣RL http://testphp.vulnweb.com/listproducts.php?cat=2 鐢熸垚 7 涓弬鏁板彉浣?  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2
+  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2&id=1
+  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2&page=1
+  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2&category=1
+  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2&product=1
+  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2&user=1
+  鍙樹綋: http://testphp.vulnweb.com/listproducts.php?cat=2&token=1
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/listproducts.php?cat=2
+[闈欐€佺埇铏玗 鍙戠幇 27 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 27涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+涓篣RL http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg 鐢熸垚 8 涓弬鏁板彉浣?  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg&id=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg&page=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?category=1&file=.%2Fpictures%2F6.jpg
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg&product=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg&user=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg&token=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg&size=160
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg
+[闈欐€佺埇铏玗 鍙戠幇 0 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 0涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/categories.php
+[闈欐€佺埇铏玗 鍙戠幇 27 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 27涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/guestbook.php
+    瀛楁鏁? 3, 鍙傛暟: 2
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/guestbook.php
+[闈欐€佺埇铏玗 鍙戠幇 23 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 23涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/userinfo.php
+    瀛楁鏁? 2, 鍙傛暟: 2
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/login.php
+[闈欐€佺埇铏玗 鍙戠幇 24 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 24涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 1 涓摼鎺?
+涓篣RL http://testphp.vulnweb.com/artists.php?artist=2 鐢熸垚 7 涓弬鏁板彉浣?  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2
+  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2&id=1
+  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2&page=1
+  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2&category=1
+  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2&product=1
+  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2&user=1
+  鍙樹綋: http://testphp.vulnweb.com/artists.php?artist=2&token=1
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/artists.php?artist=2
+[闈欐€佺埇铏玗 鍙戠幇 25 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 25涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/Mod_Rewrite_Shop/
+[闈欐€佺埇铏玗 鍙戠幇 6 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 6涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/cart.php
+[闈欐€佺埇铏玗 鍙戠幇 24 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 24涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/userinfo.php
+    瀛楁鏁? 2, 鍙傛暟: 2
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/login.php
+[闈欐€佺埇铏玗 鍙戠幇 24 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 24涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+璇锋眰閿欒 http://testphp.vulnweb.com/privacy.php: Not Found
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/index.php
+[闈欐€佺埇铏玗 鍙戠幇 25 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 25涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+涓篣RL http://testphp.vulnweb.com/product.php?pic=3 鐢熸垚 7 涓弬鏁板彉浣?  鍙樹綋: http://testphp.vulnweb.com/product.php?pic=3
+  鍙樹綋: http://testphp.vulnweb.com/product.php?id=1&pic=3
+  鍙樹綋: http://testphp.vulnweb.com/product.php?page=1&pic=3
+  鍙樹綋: http://testphp.vulnweb.com/product.php?category=1&pic=3
+  鍙樹綋: http://testphp.vulnweb.com/product.php?pic=3&product=1
+  鍙樹綋: http://testphp.vulnweb.com/product.php?pic=3&user=1
+  鍙樹綋: http://testphp.vulnweb.com/product.php?pic=3&token=1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/hpp/
+[闈欐€佺埇铏玗 鍙戠幇 2 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 2涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/cart.php
+    瀛楁鏁? 2, 鍙傛暟: 2
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/product.php?pic=3
+[闈欐€佺埇铏玗 鍙戠幇 25 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 25涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 1 涓摼鎺?
+    [JS鎻愬彇] 浠巎avascript:鍗忚鎻愬彇URL: artists.php 鈫?http://testphp.vulnweb.com/AJAX/artists.php
+    [JS鎻愬彇] 浠巎avascript:鍗忚鎻愬彇URL: categories.php 鈫?http://testphp.vulnweb.com/AJAX/categories.php
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/AJAX/index.php
+[闈欐€佺埇铏玗 鍙戠幇 5 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 2涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 3涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 2 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/artists.php
+[闈欐€佺埇铏玗 鍙戠幇 29 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 29涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+涓篣RL http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&size=160 鐢熸垚 9 涓弬鏁板彉浣?  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&size=160
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&id=1&size=160
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&page=1&size=160
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?category=1&file=.%2Fpictures%2F3.jpg&size=160
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&product=1&size=160
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&size=160&user=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&size=160&token=1
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?size=160
+  鍙樹綋: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&size=160
+[闈欐€佺埇铏玗 鍙戠幇 0 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 0涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+涓篣RL http://testphp.vulnweb.com/search.php?test=query 鐢熸垚 7 涓弬鏁板彉浣?  鍙樹綋: http://testphp.vulnweb.com/search.php?test=query
+  鍙樹綋: http://testphp.vulnweb.com/search.php?id=1&test=query
+  鍙樹綋: http://testphp.vulnweb.com/search.php?page=1&test=query
+  鍙樹綋: http://testphp.vulnweb.com/search.php?category=1&test=query
+  鍙樹綋: http://testphp.vulnweb.com/search.php?product=1&test=query
+  鍙樹綋: http://testphp.vulnweb.com/search.php?test=query&user=1
+  鍙樹綋: http://testphp.vulnweb.com/search.php?test=query&token=1
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/disclaimer.php
+[闈欐€佺埇铏玗 鍙戠幇 24 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 24涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  [闈欐€佺埇铏玗 鍙戠幇POST琛ㄥ崟: http://testphp.vulnweb.com/search.php?test=query
+    瀛楁鏁? 2, 鍙傛暟: 1
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/search.php?test=query
+[闈欐€佺埇铏玗 鍙戠幇 23 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 23涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/Flash/add.swf
+[闈欐€佺埇铏玗 鍙戠幇 0 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 0涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  鏈眰缁熻 - 鎬讳换鍔? 19, 鎴愬姛: 19, 澶辫触: 0
+
+绗?2 灞傚畬鎴愶紒鐖彇 19 涓猆RL锛岀疮璁?19 涓?
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?銆愮 3 灞傜埇鍙栥€戞贩鍚堢瓥鐣ユā寮?| 鏈€澶ф繁搴? 5
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?  鍙戠幇 13 涓閮ㄩ摼鎺ワ紙宸茶褰曚絾涓嶇埇鍙栵級
+  [URL妯″紡鍘婚噸] 鏈眰璺宠繃 23 涓噸澶嶆ā寮廢RL
+
+  [娣峰悎鍐崇瓥] 鏈眰浼樺厛绾OP3锛圔FS妗嗘灦 + 鏅鸿兘鎺掑簭锛?
+    1. [浼樺厛绾?5.50] http://testphp.vulnweb.com/AJAX/categories.php
+    2. [浼樺厛绾?5.50] http://testphp.vulnweb.com/AJAX/artists.php
+鏀堕泦鍒?2 涓€欓€塙RL
+
+  [浼樺厛绾OP5] 鏈眰鏈€楂樹环鍊糢RL:
+    1. [浼樺厛绾? 5.50] http://testphp.vulnweb.com/AJAX/categories.php
+    2. [浼樺厛绾? 5.50] http://testphp.vulnweb.com/AJAX/artists.php
+
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/AJAX/artists.php
+[闈欐€佺埇铏玗 鍙戠幇 0 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 0涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+
+[闈欐€佺埇铏玗 椤甸潰鐖彇瀹屾垚: http://testphp.vulnweb.com/AJAX/categories.php
+[闈欐€佺埇铏玗 鍙戠幇 0 涓?a>鏍囩
+[闈欐€佺埇铏玗 鏈夋晥閾炬帴: 0涓?| 閲嶅杩囨护: 0涓?| 鏃犳晥閾炬帴: 0涓?[闈欐€佺埇铏玗 鏈€缁堟敹闆? 0 涓摼鎺?
+  鏈眰缁熻 - 鎬讳换鍔? 2, 鎴愬姛: 2, 澶辫触: 0
+
+绗?3 灞傚畬鎴愶紒鐖彇 2 涓猆RL锛岀疮璁?21 涓?
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?銆愮 4 灞傜埇鍙栥€戞贩鍚堢瓥鐣ユā寮?| 鏈€澶ф繁搴? 5
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?  鍙戠幇 13 涓閮ㄩ摼鎺ワ紙宸茶褰曚絾涓嶇埇鍙栵級
+  [URL妯″紡鍘婚噸] 鏈眰璺宠繃 23 涓噸澶嶆ā寮廢RL
+绗?4 灞傛病鏈夋柊閾炬帴锛岀埇鍙栫粨鏉?
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?銆愭贩鍚堢瓥鐣ョ埇鍙栧畬鎴愩€?鎬绘繁搴? 4 灞?| 鎬籙RL: 21 涓?鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+       鑷€傚簲浼樺厛绾у涔犳姤鍛?鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+銆愬涔犵粺璁°€?  鎬荤埇鍙朥RL鏁?   21
+  楂樹环鍊糢RL:     0 (0.0%)
+  涓瓑浠峰€糢RL:   21 (100.0%)
+  浣庝环鍊糢RL:     0 (0.0%)
+
+銆愬彂鐜扮粺璁°€?  鎬婚摼鎺ユ暟:      4
+  鎬籄PI鏁?       0
+  鎬昏〃鍗曟暟:      16
+  骞冲潎閾炬帴/椤?   0.2
+  API鍙戠幇鐜?     0.0%
+
+銆愭€ц兘鎸囨爣銆?  鎴愬姛鐜?        95.2%
+  鏉冮噸璋冩暣娆℃暟:  0
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+
+姝ｅ湪鍏抽棴鐖櫕锛屾竻鐞嗚祫婧?..
+鍋滄鐖彇...
+璧勬簮娓呯悊瀹屾垚
+
+[+] URL淇濆瓨瀹屾垚:
+  - spider_testphp.vulnweb.com_20251026_233723_all_urls.txt  : 44 涓猆RL锛堝叏閮級
+  - spider_testphp.vulnweb.com_20251026_233723_post_requests.txt : 20 涓狿OST璇锋眰
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+  鉁?URL鍘婚噸鏂囦欢宸蹭繚瀛? spider_testphp.vulnweb.com_20251026_233723_unique_urls.txt
+  鍞竴URL妯″紡: 20 涓?  鍘熷URL鎬绘暟: 40 涓?  鍘婚噸鏁堟灉: 鍑忓皯 20 涓?(50.0%)
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+[鏁忔劅淇℃伅] 鏈彂鐜版晱鎰熶俊鎭紝璺宠繃鏂囦欢淇濆瓨
+[鏁忔劅淇℃伅] 鏈彂鐜版晱鎰熶俊鎭紝璺宠繃JSON淇濆瓨
+  - spider_testphp.vulnweb.com_20251026_233723_excluded.txt : 57 涓帓闄ょ殑URL
+
+============================================================
+                        鐖彇缁熻
+============================================================
+鐖彇椤甸潰鏁?    23
+鍞竴URL鏁?     22
+鍙戠幇閾炬帴鏁?    84
+鍙戠幇琛ㄥ崟鏁?    19
+POST璇锋眰鏁?    20
+API鎺ュ彛鏁?     0
+甯﹀弬鏁癠RL:     6
+闈欐€佽祫婧?      1
+鑰楁椂:          75.88绉?骞冲潎閫熷害:      0.30 椤?绉?============================================================
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?馃攳 鐧诲綍澧欐娴嬫姤鍛?鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?鎬荤埇鍙栭〉闈? 2 涓?鐧诲綍椤甸潰: 0 涓?(0.0%)
+姝ｅ父椤甸潰: 2 涓?鍞竴鐧诲綍URL: 0 涓?
+鉁?鏈彂鐜扮櫥褰曞锛屾墍鏈夐〉闈㈠潎鍙甯歌闂?鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹?
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+馃搳 URL璐ㄩ噺杩囨护鎶ュ憡 (v3.5)
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+馃幆 杩囨护鏁堟灉:
+  鍘熷鏀堕泦URL: 84
+  鏈夋晥涓氬姟URL: 1
+  杩囨护鍨冨溇URL: 83
+  杩囨护鐜? 98.8%
+
+鉁?杩囨护瑙勫垯:
+  鉁?MIME绫诲瀷瀛楃涓诧紙application/vnd.*锛?  鉁?JavaScript鍏抽敭瀛楋紙Math, Object, Array绛夛級
+  鉁?URL缂栫爜鐨勪唬鐮佺墖娈?  鉁?鏃犳剰涔夌殑鍗曞瓧绗﹁矾寰勶紙/a, /b, /M绛夛級
+  鉁?HTML鏍囩鐗囨
+  鉁?鍙繚鐣欐湁涓氬姟浠峰€肩殑URL
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+馃摦 POST璇锋眰妫€娴嬫姤鍛?(v3.5)
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+馃幆 妫€娴嬬粨鏋?
+  鎬籔OST璇锋眰鏁? 20
+  鍞竴POST绔偣: 4
+
+馃搳 鏉ユ簮鍒嗗竷:
+  - HTML琛ㄥ崟: 20 (100.0%)
+
+馃摑 POST绔偣绀轰緥锛堝墠10涓級:
+  1. http://testphp.vulnweb.com/search.php?test=query
+  2. http://testphp.vulnweb.com/guestbook.php
+  3. http://testphp.vulnweb.com/userinfo.php
+  4. http://testphp.vulnweb.com/cart.php
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+
+================================================================================
+                    URL妯″紡鍘婚噸鎶ュ憡
+================================================================================
+
+銆愭€讳綋缁熻銆?  澶勭悊URL鎬绘暟:    88
+  鍞竴妯″紡鏁?     22
+  閲嶅URL鏁?      66
+  鑺傜渷璇锋眰鏁?     66
+  鍘婚噸鐜?         75.0%
+
+銆怲op 10 閲嶅妯″紡銆?--------------------------------------------------------------------------------
+
+1. GET http://testphp.vulnweb.com/showimage.php?file=
+   閲嶅娆℃暟: 21
+   棣栨URL:  http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F6.jpg
+   閲嶅绀轰緥: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F2.jpg, http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F5.jpg, ... (鍏?涓?
+
+2. GET http://testphp.vulnweb.com/showimage.php?file=&size=
+   閲嶅娆℃暟: 21
+   棣栨URL:  http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F3.jpg&size=160
+   閲嶅绀轰緥: http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F7.jpg&size=160, http://testphp.vulnweb.com/showimage.php?file=.%2Fpictures%2F2.jpg&size=160, ... (鍏?涓?
+
+3. GET http://testphp.vulnweb.com/product.php?pic=
+   閲嶅娆℃暟: 19
+   棣栨URL:  http://testphp.vulnweb.com/product.php?pic=3
+   閲嶅绀轰緥: http://testphp.vulnweb.com/product.php?pic=4, http://testphp.vulnweb.com/product.php?pic=1, ... (鍏?涓?
+
+4. GET http://testphp.vulnweb.com/artists.php?artist=
+   閲嶅娆℃暟: 4
+   棣栨URL:  http://testphp.vulnweb.com/artists.php?artist=2
+   閲嶅绀轰緥: http://testphp.vulnweb.com/artists.php?artist=1, http://testphp.vulnweb.com/artists.php?artist=1, ... (鍏?涓?
+
+5. GET http://testphp.vulnweb.com/listproducts.php?cat=
+   閲嶅娆℃暟: 4
+   棣栨URL:  http://testphp.vulnweb.com/listproducts.php?cat=2
+   閲嶅绀轰緥: http://testphp.vulnweb.com/listproducts.php?cat=1, http://testphp.vulnweb.com/listproducts.php?cat=1, ... (鍏?涓?
+
+6. GET mailto://
+   閲嶅娆℃暟: 3
+   棣栨URL:  mailto:wvs@acunetix.com
+   閲嶅绀轰緥: mailto:wvs@acunetix.com, mailto:wvs@acunetix.com
+
+7. GET http://testphp.vulnweb.com/AJAX/artists.php
+   閲嶅娆℃暟: 1
+   棣栨URL:  http://testphp.vulnweb.com/AJAX/artists.php
+
+8. GET http://testphp.vulnweb.com/artists.php
+   閲嶅娆℃暟: 1
+   棣栨URL:  http://testphp.vulnweb.com/artists.php
+
+9. GET http://testphp.vulnweb.com/index.php
+   閲嶅娆℃暟: 1
+   棣栨URL:  http://testphp.vulnweb.com/index.php
+
+10. GET http://testphp.vulnweb.com/categories.php
+   閲嶅娆℃暟: 1
+   棣栨URL:  http://testphp.vulnweb.com/categories.php
+
+================================================================================
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+         URL鍘婚噸缁熻鎶ュ憡
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+  鍞竴URL妯″紡: 20 涓?  URL鎬绘暟:     40 涓?  骞冲潎鍙樹綋鏁?  2 涓?妯″紡
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+  鍘婚噸鏁堟灉: 鍑忓皯 20 涓猆RL (50.0%)
+
+
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+       URL妯″紡鍙樹綋璇︾粏鎶ュ憡
+鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+[1] 妯″紡: http://testphp.vulnweb.com/showimage.php?file=
+    鍙樹綋鏁? 7 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/showimage.php?file=./pictures/1.jpg
+      - http://testphp.vulnweb.com/showimage.php?file=./pictures/2.jpg
+      - http://testphp.vulnweb.com/showimage.php?file=./pictures/3.jpg
+      ... 杩樻湁 4 涓彉浣?
+[2] 妯″紡: http://testphp.vulnweb.com/product.php?pic=
+    鍙樹綋鏁? 7 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/product.php?pic=1
+      - http://testphp.vulnweb.com/product.php?pic=2
+      - http://testphp.vulnweb.com/product.php?pic=3
+      ... 杩樻湁 4 涓彉浣?
+[3] 妯″紡: http://testphp.vulnweb.com/showimage.php?file=&size=
+    鍙樹綋鏁? 7 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/showimage.php?file=./pictures/1.jpg&size=160
+      - http://testphp.vulnweb.com/showimage.php?file=./pictures/2.jpg&size=160
+      - http://testphp.vulnweb.com/showimage.php?file=./pictures/3.jpg&size=160
+      ... 杩樻湁 4 涓彉浣?
+[4] 妯″紡: http://testphp.vulnweb.com/listproducts.php?cat=
+    鍙樹綋鏁? 2 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/listproducts.php?cat=1
+      - http://testphp.vulnweb.com/listproducts.php?cat=2
+
+[5] 妯″紡: http://testphp.vulnweb.com/artists.php?artist=
+    鍙樹綋鏁? 2 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/artists.php?artist=1
+      - http://testphp.vulnweb.com/artists.php?artist=2
+
+[6] 妯″紡: http://testphp.vulnweb.com/
+    鍙樹綋鏁? 1 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/
+
+[7] 妯″紡: http://testphp.vulnweb.com/privacy.php
+    鍙樹綋鏁? 1 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/privacy.php
+
+[8] 妯″紡: http://testphp.vulnweb.com/cart.php
+    鍙樹綋鏁? 1 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/cart.php
+
+[9] 妯″紡: http://testphp.vulnweb.com/AJAX/index.php
+    鍙樹綋鏁? 1 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/AJAX/index.php
+
+[10] 妯″紡: http://testphp.vulnweb.com/index.php
+    鍙樹綋鏁? 1 涓?    绀轰緥:
+      - http://testphp.vulnweb.com/index.php
+
+... 杩樻湁 10 涓ā寮?鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣鈹佲攣
+
+
+================================================================================
+                   URL缁撴瀯鍖栧幓閲嶆姤鍛?================================================================================
+
+銆愭€讳綋缁熻銆?  鎬籙RL鏁?          0 涓?  鍞竴缁撴瀯鏁?       0 涓?  鍘婚噸鐨刄RL鏁?      0 涓?
+================================================================================
+
+[+] 缁撴灉宸蹭繚瀛樺埌褰撳墠鐩綍

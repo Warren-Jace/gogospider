@@ -26,6 +26,8 @@ type StaticCrawlerImpl struct {
 	paramHandler     *ParamHandler
 	cookieManager    *CookieManager    // Cookie管理器（v3.2新增）
 	redirectManager  *RedirectManager  // 重定向管理器（v3.2新增）
+	urlValidator     *URLValidator     // URL验证器（v3.5新增）
+	spider           SpiderRecorder    // Spider引用（v3.7新增，用于实时记录URL）
 }
 
 
@@ -56,6 +58,7 @@ func NewStaticCrawler(config *config.Config, resultChan chan<- Result, stopChan 
 		stopChan:         stopChan,
 		duplicateHandler: duplicateHandler,
 		paramHandler:     paramHandler,
+		urlValidator:     NewURLValidator(), // 🆕 v3.5: 初始化URL验证器
 	}
 }
 
@@ -79,6 +82,11 @@ func (s *StaticCrawlerImpl) SetCookieManager(cm *CookieManager) {
 // SetRedirectManager 设置重定向管理器（v3.2新增）
 func (s *StaticCrawlerImpl) SetRedirectManager(rm *RedirectManager) {
 	s.redirectManager = rm
+}
+
+// SetSpider 设置Spider引用（v3.7新增，实现Crawler接口）
+func (s *StaticCrawlerImpl) SetSpider(spider SpiderRecorder) {
+	s.spider = spider
 }
 
 // Crawl 执行爬取
@@ -161,6 +169,47 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		link := e.Attr("href")
 		linkCount++
 		
+		// 🆕 v3.7: 检查特殊协议链接并记录
+		if strings.HasPrefix(link, "mailto:") {
+			if s.spider != nil {
+				s.spider.RecordSpecialLink(link, "mailto")
+			}
+			invalidCount++
+			return
+		}
+		if strings.HasPrefix(link, "tel:") {
+			if s.spider != nil {
+				s.spider.RecordSpecialLink(link, "tel")
+			}
+			invalidCount++
+			return
+		}
+		if strings.HasPrefix(link, "ftp://") {
+			if s.spider != nil {
+				s.spider.RecordSpecialLink(link, "ftp")
+			}
+			invalidCount++
+			return
+		}
+		if strings.HasPrefix(link, "ws://") || strings.HasPrefix(link, "wss://") {
+			if s.spider != nil {
+				protocol := "ws"
+				if strings.HasPrefix(link, "wss://") {
+					protocol = "wss"
+				}
+				s.spider.RecordSpecialLink(link, protocol)
+			}
+			invalidCount++
+			return
+		}
+		if strings.HasPrefix(link, "data:") {
+			if s.spider != nil {
+				s.spider.RecordSpecialLink(link, "data")
+			}
+			invalidCount++
+			return
+		}
+		
 		// 特殊处理：如果是javascript:协议，提取其中的URL
 		if strings.HasPrefix(link, "javascript:") {
 			// 简单直接的提取：从javascript:函数调用中提取参数
@@ -203,18 +252,44 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			return
 		}
 		
+		// 🆕 v3.5: 使用URL验证器过滤无效业务URL
+		if s.urlValidator != nil && !s.urlValidator.IsValidBusinessURL(absoluteURL) {
+			invalidCount++
+			return
+		}
+		
 		// 检查是否重复
-		if s.duplicateHandler.IsDuplicateURL(absoluteURL) {
+		isDuplicate := s.duplicateHandler.IsDuplicateURL(absoluteURL)
+		if isDuplicate {
 			duplicateCount++
 			// 特别记录comment相关的重复URL
 			if strings.Contains(absoluteURL, "comment") {
 				fmt.Printf("    [重复过滤] comment URL: %s\n", absoluteURL)
 			}
+			// 重复的URL也不再添加到Links
 			return
 		}
 		
-		validCount++
+		// ✅ 修复2: 始终将URL添加到result.Links（用于完整记录所有发现的URL）
 		result.Links = append(result.Links, absoluteURL)
+		
+		// 🆕 v3.7: 使用资源分类器判断URL类型
+		if s.spider != nil {
+			classifier := s.spider.GetResourceClassifier()
+			if classifier != nil {
+				resourceType, shouldRequest := classifier.ClassifyURL(absoluteURL)
+				
+				if !shouldRequest {
+					// 静态资源：记录到静态资源列表（但URL已在Links中）
+					s.spider.RecordStaticResource(absoluteURL, resourceType)
+					invalidCount++
+					// 这里不return，继续标记validCount，因为URL已成功记录
+				}
+				// 需要请求的资源继续处理
+			}
+		}
+		
+		validCount++
 	})
 	
 	// 添加详细调试日志
@@ -369,7 +444,7 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		}
 	})
 	
-	// 设置资源回调
+	// 🆕 v3.7: 设置资源回调（增强版：实时分类和记录）
 	collector.OnHTML("link[href], script[src], img[src]", func(e *colly.HTMLElement) {
 		var assetURL string
 		if e.Name == "link" {
@@ -378,11 +453,19 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			assetURL = e.Attr("src")
 		}
 		absoluteURL := e.Request.AbsoluteURL(assetURL)
-		if absoluteURL != "" {
-			// 检查是否为重复资源
-			if !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Assets = append(result.Assets, absoluteURL)
+		if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
+			// 🆕 v3.7: 使用资源分类器判断并记录
+			if s.spider != nil {
+				classifier := s.spider.GetResourceClassifier()
+				if classifier != nil {
+					resourceType, shouldRequest := classifier.ClassifyURL(absoluteURL)
+					if !shouldRequest {
+						// 静态资源：只记录不请求
+						s.spider.RecordStaticResource(absoluteURL, resourceType)
+					}
+				}
 			}
+			result.Assets = append(result.Assets, absoluteURL)
 		}
 	})
 	
@@ -936,6 +1019,7 @@ func (s *StaticCrawlerImpl) extractURLsFromHeaders(r *colly.Response) []string {
 func (s *StaticCrawlerImpl) extractURLsFromInlineScripts(htmlContent, baseURL string) []string {
 	urls := make([]string, 0)
 	seen := make(map[string]bool)
+	filteredCount := 0 // 🆕 v3.5: 统计过滤的URL数量
 	
 	// 1. 提取<script>标签内容
 	scriptPattern := regexp.MustCompile(`(?i)<script[^>]*>([\s\S]*?)</script>`)
@@ -948,6 +1032,13 @@ func (s *StaticCrawlerImpl) extractURLsFromInlineScripts(htmlContent, baseURL st
 			for _, u := range extractedURLs {
 				if !seen[u] {
 					seen[u] = true
+					
+					// 🆕 v3.5: 使用URL验证器过滤无效URL
+					if s.urlValidator != nil && !s.urlValidator.IsValidBusinessURL(u) {
+						filteredCount++
+						continue
+					}
+					
 					urls = append(urls, u)
 				}
 			}
@@ -970,11 +1061,23 @@ func (s *StaticCrawlerImpl) extractURLsFromInlineScripts(htmlContent, baseURL st
 				for _, u := range extractedURLs {
 					if !seen[u] {
 						seen[u] = true
+						
+						// 🆕 v3.5: 使用URL验证器过滤无效URL
+						if s.urlValidator != nil && !s.urlValidator.IsValidBusinessURL(u) {
+							filteredCount++
+							continue
+						}
+						
 						urls = append(urls, u)
 					}
 				}
 			}
 		}
+	}
+	
+	// 🆕 v3.5: 输出过滤统计
+	if filteredCount > 0 {
+		fmt.Printf("    [URL过滤] 从JS中过滤了 %d 个无效URL\n", filteredCount)
 	}
 	
 	return urls
@@ -1040,8 +1143,11 @@ func (s *StaticCrawlerImpl) extractURLsFromJSCode(jsCode string) []string {
 		`['"]/(AJAX/[^'"]+)['"]`,
 		`['"]/(v\d+/[^'"]+)['"]`,
 		
-		// 通用路径匹配（以/开头的路径）
-		`['"](/[a-zA-Z0-9_\-/.?=&]+)['"]`,
+		// 🔧 v3.5: 优化通用路径匹配 - 要求至少3个字符，且不能是纯字母
+		// 原模式太宽松: `['"](/[a-zA-Z0-9_\-/.?=&]+)['"]`
+		// 新模式: 必须包含/或至少3个字符
+		`['"](/[a-zA-Z0-9_\-]+/[a-zA-Z0-9_\-/.?=&]+)['"]`, // 至少两段路径 /api/users
+		`['"](/[a-zA-Z0-9_\-]{3,}\.(?:php|jsp|asp|do|action)[^'"]*)['"]`, // 文件路径 /login.php
 		
 		// ===== 新增：函数参数中的.php文件 =====
 		`\w+\s*\(\s*['"]([^'"]*\.php[^'"]*)['"]`,  // anyFunc('xxx.php')

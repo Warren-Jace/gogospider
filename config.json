@@ -185,7 +185,8 @@
     "_exclude_note_1": "✅ JS文件已从排除列表移除，程序会自动访问和分析JS",
     "_exclude_note_2": "✅ 静态资源只记录不请求，提升爬取效率70%+",
     "_exclude_note_3": "✅ 黑名单和超出范围的URL也只记录不请求",
-    "exclude_extensions": [
+    "exclude_extensions": [],
+    "_exclude_extensions": [
       "jpg", "jpeg", "png", "gif", "svg", "ico", "webp", "bmp",
       "css", "scss", "sass",
       "woff", "woff2", "ttf", "eot", "otf",
