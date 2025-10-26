@@ -4,7 +4,60 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.18+-00ADD8?logo=go)](https://golang.org/)
-[![Version](https://img.shields.io/badge/version-v2.11-green.svg)](https://github.com/Warren-Jace/gogospider)
+[![Version](https://img.shields.io/badge/version-v3.0-green.svg)](https://github.com/Warren-Jace/gogospider)
+
+---
+
+## 🎉 v3.0 重大更新
+
+### 📝 简化配置体验
+
+**问题：** v2.x 版本有70+个命令行参数，使用复杂，难以记忆
+
+**解决方案：**
+- ✅ **精简命令行参数**：只保留15个最常用参数
+- ✅ **配置文件优化**：所有细节配置移到JSON文件
+- ✅ **预设场景**：提供5种开箱即用的配置模板
+- ✅ **清晰优先级**：命令行 > 配置文件 > 默认值
+
+### 🛡️ 新增黑名单功能
+
+自动防止爬取敏感网站：
+- 政府网站（*.gov.cn, *.gov）
+- 教育机构（*.edu.cn, *.edu）
+- 金融机构（*bank*, *payment*）
+- 支持通配符和模糊匹配
+
+### 📦 批量扫描增强
+
+- 完整的批量扫描配置
+- 独立报告 + 汇总报告
+- 错误处理和超时控制
+- 并发数可配置
+
+### 📚 新增完整文档
+
+- **[CONFIG_GUIDE.md](CONFIG_GUIDE.md)** - 完整配置指南
+- **[PARAMETERS_MIGRATION.md](PARAMETERS_MIGRATION.md)** - 参数迁移指南
+- **config_presets/** - 5种预设场景配置
+
+### 🚀 快速开始
+
+```bash
+# 1. 基础扫描（使用默认配置）
+./spider -url https://example.com
+
+# 2. 使用预设场景（推荐）
+./spider -url https://example.com -preset deep_scan
+
+# 3. 批量扫描
+./spider -batch-file targets.txt -preset batch_scan
+
+# 4. 使用自定义配置
+./spider -url https://example.com -config my_config.json
+```
+
+📖 **详细文档**: 查看 [CONFIG_GUIDE.md](CONFIG_GUIDE.md)
 
 ---
 
@@ -107,36 +160,51 @@ go build -o spider.exe cmd/spider/main.go
 ### 基本用法
 
 ```bash
-# 基础爬取（自动启用敏感信息检测）
+# 基础爬取（使用默认配置）
 ./spider -url https://example.com
 
-# 指定爬取深度
-./spider -url https://example.com -depth 5
+# 指定爬取深度和并发
+./spider -url https://example.com -depth 5 -workers 20
 
 # 使用配置文件
-./spider -config example_config.json
+./spider -url https://example.com -config my_config.json
 ```
 
-### 敏感信息检测
+### 🎯 使用预设场景（推荐）
+
+v3.0 提供5种开箱即用的预设场景：
+
+#### 1️⃣ 快速扫描 - 初步侦查
 
 ```bash
-# 使用外部规则文件
-./spider -url https://example.com -sensitive-rules sensitive_rules_config.json
-
-# 只检测高危敏感信息
-./spider -url https://example.com -sensitive-min-severity HIGH
-
-# 禁用敏感信息检测（性能优先）
-./spider -url https://example.com -sensitive-detect=false
-
-# 保存敏感信息到指定文件
-./spider -url https://example.com -sensitive-output ./sensitive_report.json
+./spider -url https://example.com -preset quick_scan
 ```
 
-### 批量扫描（v2.11新增）
+**适用场景**: 快速了解网站结构、时间紧急、初步测试  
+**特点**: 3层深度、200页面限制、只启用静态爬虫、高效快速
+
+#### 2️⃣ 深度扫描 - 全面审计
 
 ```bash
-# 创建URL列表文件
+./spider -url https://example.com -preset deep_scan
+```
+
+**适用场景**: 安全测试、全面审计、API发现、漏洞挖掘  
+**特点**: 8层深度、5000页面、启用所有功能、包含历史数据源
+
+#### 3️⃣ API发现 - 接口分析
+
+```bash
+./spider -url https://example.com -preset api_discovery
+```
+
+**适用场景**: API测试、接口文档生成、后端接口发现  
+**特点**: 只关注API路径、排除静态资源、高业务价值过滤
+
+#### 4️⃣ 批量扫描 - 多目标扫描
+
+```bash
+# 准备目标文件
 cat > targets.txt << EOF
 https://www.example.com
 https://api.example.com
@@ -144,23 +212,72 @@ https://admin.example.com
 EOF
 
 # 批量扫描
-./spider -batch-file targets.txt -batch-concurrency 10
-
-# 批量扫描 + 敏感信息检测
-./spider -batch-file targets.txt \
-  -sensitive-rules sensitive_rules_config.json \
-  -batch-concurrency 5 \
-  -depth 3
+./spider -batch-file targets.txt -preset batch_scan
 ```
+
+**适用场景**: 多目标扫描、资产发现、批量测试  
+**特点**: 并发5个目标、独立报告、汇总报告、错误容错
+
+#### 5️⃣ 隐蔽扫描 - 低速隐蔽
+
+```bash
+./spider -url https://example.com -preset stealth_scan
+```
+
+**适用场景**: 敏感目标、需要隐蔽、避免触发WAF/IDS  
+**特点**: 低速率(5 req/s)、随机延迟、多UA轮换、高隐蔽性
+
+### 💡 自定义配置
+
+```bash
+# 基于预设修改参数
+./spider -url https://example.com -preset deep_scan -depth 10 -workers 50
+
+# 使用完全自定义配置
+./spider -url https://example.com -config my_custom_config.json
+
+# 查看预设配置
+cat config_presets/deep_scan.json
+```
+
+📖 **完整配置指南**: 查看 [CONFIG_GUIDE.md](CONFIG_GUIDE.md)
+
+### 🔍 敏感信息检测
+
+```bash
+# 默认启用敏感信息检测（使用内置规则）
+./spider -url https://example.com
+
+# 使用自定义规则文件（在配置文件中指定）
+./spider -url https://example.com -config my_config.json
+```
+
+**配置文件中指定规则：**
+```json
+{
+  "sensitive_detection_settings": {
+    "enabled": true,
+    "rules_file": "./my_custom_rules.json",
+    "min_severity": "MEDIUM"
+  }
+}
+```
+
+**检测内容**:
+- ☁️ 云存储密钥（AWS、阿里云、腾讯云等）
+- 🔐 第三方登录授权（微信、支付宝、QQ等）
+- 🗝️ 账号密码（管理员、数据库、Redis等）
+- 🔑 API密钥和Token
+- 📧 个人信息（手机号、身份证等）
 
 ### 管道模式
 
 ```bash
 # 从标准输入读取URL
-cat urls.txt | ./spider -stdin -simple
+cat urls.txt | ./spider -stdin -quiet
 
 # 与其他工具链配合
-echo "https://example.com" | ./spider -stdin | nuclei -t cves/
+echo "https://example.com" | ./spider -stdin | grep "api" | nuclei -t cves/
 ```
 
 ---
@@ -192,47 +309,146 @@ batch_site3.com_20251026_143000_all_urls.txt
 
 ---
 
-## ⚙️ 命令行参数
+## ⚙️ 配置说明
 
-### 基础参数
+### 命令行参数（v3.0 精简版）
+
+v3.0 只保留 **15个核心参数**，其他配置移到配置文件中。
+
+#### 核心参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-url <url>` | 目标URL（必需，单站点模式） | - |
-| `-batch-file <file>` | 批量URL列表文件 | - |
-| `-depth <num>` | 最大爬取深度 | 3 |
-| `-mode <mode>` | 爬取模式：static, dynamic, smart | smart |
+| `-url <url>` | 目标URL（必需） | - |
 | `-config <file>` | 配置文件路径 | - |
+| `-preset <name>` | 🆕 预设场景名称 | - |
 
-### 敏感信息检测参数（v2.11）
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `-sensitive-detect` | 启用/禁用敏感信息检测 | true |
-| `-sensitive-rules <file>` | 外部规则文件（JSON格式） | - |
-| `-sensitive-scan-body` | 扫描HTTP响应体 | true |
-| `-sensitive-scan-headers` | 扫描HTTP响应头 | true |
-| `-sensitive-min-severity` | 最低严重级别（LOW/MEDIUM/HIGH） | LOW |
-| `-sensitive-output <file>` | 敏感信息JSON输出文件 | - |
-| `-sensitive-realtime` | 实时输出敏感信息发现 | true |
-
-### 批量扫描参数（v2.11）
+#### 基础参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-batch-file <file>` | URL列表文件路径 | - |
-| `-batch-concurrency <num>` | 批量扫描并发数 | 5 |
+| `-depth <num>` | 最大爬取深度 | 3 |
+| `-max-pages <num>` | 最大页面数 | 100 |
+| `-workers <num>` | 并发工作线程数 | 10 |
+| `-mode <mode>` | 爬取模式：static/dynamic/smart | smart |
 
-### 其他常用参数
+#### 输出参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `-proxy <url>` | HTTP代理服务器 | - |
-| `-user-agent <string>` | 自定义User-Agent | - |
-| `-log-level <level>` | 日志级别（debug/info/warn/error） | info |
+| `-output <dir>` | 输出目录 | ./ |
+| `-json` | 启用JSON输出 | false |
 | `-quiet` | 静默模式 | false |
-| `-stdin` | 从标准输入读取URL | false |
-| `-simple` | 简洁输出模式 | false |
+
+#### 高级参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-proxy <url>` | 代理服务器 | - |
+| `-allow-subdomains` | 允许爬取子域名 | false |
+| `-batch-file <file>` | 批量扫描文件 | - |
+
+#### 工具参数
+
+| 参数 | 说明 |
+|------|------|
+| `-version` | 显示版本信息 |
+| `-help` | 显示帮助信息 |
+
+### 配置文件（推荐）
+
+v3.0 将所有细节配置移到了JSON配置文件中，提供更好的可维护性。
+
+#### 配置文件模板
+
+```bash
+# 完整配置模板
+cp example_config_optimized.json my_config.json
+
+# 或使用预设场景
+cp config_presets/deep_scan.json my_config.json
+```
+
+#### 配置文件结构
+
+```json
+{
+  "blacklist_settings": { ... },      // 🆕 黑名单配置
+  "batch_scan_settings": { ... },     // 🆕 批量扫描配置
+  "scope_settings": { ... },          // 作用域控制
+  "depth_settings": { ... },          // 深度设置
+  "anti_detection_settings": { ... }, // 反检测设置
+  "deduplication_settings": { ... },  // 去重设置
+  "rate_limit_settings": { ... },     // 速率控制
+  "sensitive_detection_settings": { ... }, // 敏感信息检测
+  "output_settings": { ... },         // 输出设置
+  "log_settings": { ... }             // 日志设置
+}
+```
+
+### 🛡️ 黑名单配置（v3.0新增）
+
+防止误爬敏感网站（政府、教育、金融等）：
+
+```json
+"blacklist_settings": {
+  "enabled": true,
+  "domains": [
+    "*.gov.cn",      // 政府网站
+    "*.edu.cn",      // 教育机构
+    "*.mil.cn",      // 军事网站
+    "*.bank.com"     // 银行网站
+  ],
+  "domain_patterns": [
+    "*bank*",        // 包含bank的域名
+    "*payment*"      // 包含payment的域名
+  ],
+  "strict_mode": true  // true=拒绝访问，false=记录警告
+}
+```
+
+### 🔍 敏感信息规则配置
+
+在配置文件中指定规则文件路径：
+
+```json
+"sensitive_detection_settings": {
+  "enabled": true,
+  "rules_file": "./sensitive_rules_config.json",
+  "min_severity": "LOW",
+  "scan_response_body": true,
+  "scan_response_headers": true,
+  "realtime_output": true
+}
+```
+
+### 📦 批量扫描配置
+
+```json
+"batch_scan_settings": {
+  "enabled": true,
+  "input_file": "targets.txt",
+  "concurrency": 5,
+  "output_dir": "./batch_results",
+  "per_target_timeout": 3600,
+  "continue_on_error": true
+}
+```
+
+### 配置优先级
+
+```
+命令行参数 > 配置文件 > 默认值
+```
+
+**示例**:
+```bash
+# 配置文件中 depth=5，命令行指定 depth=3，最终使用 3
+./spider -url https://example.com -depth 3 -config config.json
+```
+
+📖 **完整配置文档**: [CONFIG_GUIDE.md](CONFIG_GUIDE.md)  
+📖 **参数迁移指南**: [PARAMETERS_MIGRATION.md](PARAMETERS_MIGRATION.md)
 
 ---
 

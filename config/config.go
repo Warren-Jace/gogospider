@@ -34,6 +34,10 @@ type Config struct {
 	
 	// 🆕 敏感信息检测设置
 	SensitiveDetectionSettings SensitiveDetectionSettings // 敏感信息检测设置
+	
+	// 🆕 v3.0 新增功能
+	BlacklistSettings BlacklistSettings   // 黑名单设置
+	BatchScanSettings BatchScanSettings   // 批量扫描设置
 }
 
 // DepthSettings 爬取深度设置
@@ -300,6 +304,51 @@ type SensitiveDetectionSettings struct {
 	
 	// 排除的URL模式（不检测这些URL）
 	ExcludeURLPatterns []string
+	
+	// 敏感信息规则文件路径
+	RulesFile string
+}
+
+// BlacklistSettings 黑名单设置（v3.0 新增）
+type BlacklistSettings struct {
+	// 是否启用黑名单
+	Enabled bool
+	
+	// 黑名单域名列表（支持通配符，如 *.gov.cn）
+	Domains []string
+	
+	// 黑名单域名模式（如 *bank*, *payment*）
+	DomainPatterns []string
+	
+	// 严格模式：true=完全拒绝访问，false=只记录警告
+	StrictMode bool
+}
+
+// BatchScanSettings 批量扫描设置（v3.0 新增）
+type BatchScanSettings struct {
+	// 是否启用批量扫描
+	Enabled bool
+	
+	// 输入文件路径（每行一个URL）
+	InputFile string
+	
+	// 并发扫描数量
+	Concurrency int
+	
+	// 输出目录
+	OutputDir string
+	
+	// 每个目标的超时时间（秒）
+	PerTargetTimeout int
+	
+	// 遇到错误时是否继续
+	ContinueOnError bool
+	
+	// 是否为每个目标保存单独的报告
+	SaveIndividualReports bool
+	
+	// 是否保存汇总报告
+	SaveSummaryReport bool
 }
 
 // CustomPattern 自定义检测模式
@@ -440,6 +489,27 @@ func NewDefaultConfig() *Config {
 			OutputFile:           "",     // 默认不单独保存（包含在总报告中）
 			RealTimeOutput:       true,   // 实时输出敏感信息发现
 			ExcludeURLPatterns:   []string{}, // 默认不排除任何URL
+			RulesFile:            "./sensitive_rules_config.json", // 默认规则文件
+		},
+		
+		// 🆕 v3.0: 黑名单默认配置
+		BlacklistSettings: BlacklistSettings{
+			Enabled:    true, // 默认启用黑名单
+			Domains:    []string{"*.gov.cn", "*.edu.cn", "*.mil.cn"}, // 默认黑名单
+			DomainPatterns: []string{},
+			StrictMode: true, // 严格模式
+		},
+		
+		// 🆕 v3.0: 批量扫描默认配置
+		BatchScanSettings: BatchScanSettings{
+			Enabled:               false,  // 默认不启用
+			InputFile:             "targets.txt",
+			Concurrency:           5,
+			OutputDir:             "./batch_results",
+			PerTargetTimeout:      3600,
+			ContinueOnError:       true,
+			SaveIndividualReports: true,
+			SaveSummaryReport:     true,
 		},
 	}
 }

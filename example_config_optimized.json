@@ -1,0 +1,254 @@
+{
+  "_comment": "GogoSpider 优化配置文件 - v3.0",
+  "_description": "此配置文件包含所有细节配置，命令行参数仅保留最常用的选项",
+  "_priority": "优先级：命令行参数 > 配置文件 > 默认值",
+  
+  "target_url": "https://example.com",
+  
+  "blacklist_settings": {
+    "_comment": "黑名单配置 - 防止访问敏感或不应爬取的网站",
+    "enabled": true,
+    "domains": [
+      "*.gov.cn",
+      "*.edu.cn",
+      "*.mil.cn",
+      "*.gov",
+      "*.edu",
+      "*.mil",
+      "github.com",
+      "gitlab.com",
+      "bitbucket.org"
+    ],
+    "domain_patterns": [
+      "*bank*",
+      "*payment*",
+      "*admin.gov*",
+      "*police*",
+      "*court*"
+    ],
+    "strict_mode": true,
+    "_note": "strict_mode为true时，匹配到黑名单将完全拒绝访问；为false时只记录警告"
+  },
+  
+  "batch_scan_settings": {
+    "_comment": "批量扫描配置 - 用于扫描多个目标",
+    "enabled": false,
+    "input_file": "targets.txt",
+    "concurrency": 5,
+    "output_dir": "./batch_results",
+    "per_target_timeout": 3600,
+    "continue_on_error": true,
+    "save_individual_reports": true,
+    "save_summary_report": true,
+    "_note": "批量扫描时，每个URL使用相同的配置文件，但可以通过命令行覆盖部分参数"
+  },
+  
+  "scope_settings": {
+    "_comment": "作用域控制 - 精确控制爬取范围",
+    "_priority_note": "优先级：exclude_regex > exclude_domains > exclude_paths > include_regex > include_domains > include_paths",
+    "enabled": true,
+    
+    "include_domains": [
+      "*.example.com",
+      "api.example.com"
+    ],
+    "exclude_domains": [
+      "cdn.example.com",
+      "static.example.com"
+    ],
+    
+    "include_paths": [
+      "/api/*",
+      "/admin/*",
+      "/user/*"
+    ],
+    "exclude_paths": [
+      "/*.jpg",
+      "/*.png",
+      "/*.css",
+      "/*.js",
+      "/logout",
+      "/signout"
+    ],
+    
+    "include_regex": "",
+    "exclude_regex": "(\\.(jpg|jpeg|png|gif|svg|ico|css|js|woff|woff2|ttf|eot|mp4|mp3|pdf|zip)$)",
+    
+    "include_extensions": [
+      "php",
+      "jsp",
+      "aspx",
+      "do",
+      "action",
+      "html",
+      "htm"
+    ],
+    "exclude_extensions": [
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "svg",
+      "ico",
+      "css",
+      "js",
+      "woff",
+      "woff2",
+      "ttf",
+      "eot",
+      "mp4",
+      "mp3",
+      "avi",
+      "mov",
+      "pdf",
+      "doc",
+      "docx",
+      "xls",
+      "xlsx",
+      "zip",
+      "rar",
+      "tar",
+      "gz"
+    ],
+    
+    "allow_subdomains": true,
+    "stay_in_domain": true,
+    "allow_http": true,
+    "allow_https": true,
+    "max_url_length": 2048,
+    "max_params": 20,
+    "_note": "当命令行指定了 -url 参数时，该域名会自动添加到 include_domains"
+  },
+  
+  "depth_settings": {
+    "_comment": "爬取深度配置",
+    "max_depth": 5,
+    "deep_crawling": true,
+    "scheduling_algorithm": "BFS",
+    "max_pages": 1000,
+    "_note": "max_pages 为总页面数限制，0表示不限制"
+  },
+  
+  "strategy_settings": {
+    "_comment": "爬取策略配置",
+    "enable_static_crawler": true,
+    "enable_dynamic_crawler": true,
+    "enable_js_analysis": true,
+    "enable_api_inference": true,
+    "domain_scope": "",
+    "use_priority_queue": false,
+    "enable_common_path_scan": false,
+    "chrome_path": "",
+    "_note": "chrome_path 为空时自动查找系统安装的Chrome"
+  },
+  
+  "anti_detection_settings": {
+    "_comment": "反检测配置",
+    "request_delay": 500000000,
+    "random_delay": true,
+    "random_delay_range": [100000000, 1000000000],
+    "user_agents": [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ],
+    "proxies": [],
+    "enable_form_auto_fill": true,
+    "timeout": 30,
+    "retry_times": 3,
+    "retry_delay": 1000000000
+  },
+  
+  "deduplication_settings": {
+    "_comment": "去重配置 - 智能去重减少无效爬取",
+    "similarity_threshold": 0.85,
+    "enable_dom_deduplication": true,
+    "enable_url_pattern_recognition": true,
+    "enable_smart_param_dedup": true,
+    "max_param_value_variants_per_group": 3,
+    "enable_business_aware_filter": true,
+    "business_filter_min_score": 30.0,
+    "business_filter_high_value_threshold": 70.0,
+    "business_filter_max_low_value": 2,
+    "business_filter_max_mid_value": 5,
+    "business_filter_max_high_value": 20,
+    "business_filter_adaptive_learning": true,
+    "enable_param_validation": true,
+    "param_validation_similarity": 0.95,
+    "param_validation_max_similar": 3,
+    "param_validation_min_diff": 50
+  },
+  
+  "rate_limit_settings": {
+    "_comment": "速率控制 - 避免对目标造成压力",
+    "enabled": false,
+    "requests_per_second": 50,
+    "burst_size": 10,
+    "min_delay": 100,
+    "max_delay": 1000,
+    "adaptive": true,
+    "adaptive_min_rate": 10,
+    "adaptive_max_rate": 100
+  },
+  
+  "external_source_settings": {
+    "_comment": "外部数据源 - 从历史数据获取更多URL",
+    "enabled": false,
+    "enable_wayback_machine": false,
+    "enable_virustotal": false,
+    "virustotal_api_key": "",
+    "enable_common_crawl": false,
+    "max_results_per_source": 1000,
+    "timeout": 30
+  },
+  
+  "sensitive_detection_settings": {
+    "_comment": "敏感信息检测配置",
+    "enabled": true,
+    "scan_response_body": true,
+    "scan_response_headers": true,
+    "min_severity": "LOW",
+    "enable_custom_patterns": false,
+    "custom_patterns": [],
+    "save_full_value": false,
+    "output_file": "",
+    "realtime_output": true,
+    "exclude_url_patterns": [],
+    "rules_file": "./sensitive_rules_config.json",
+    "_note": "rules_file 指定敏感信息规则文件路径，支持相对路径和绝对路径",
+    "_规则选择说明": {
+      "full": "sensitive_rules_config.json (100+规则，全面审计) ← 默认推荐",
+      "standard": "sensitive_rules_standard.json (40个规则，日常使用)",
+      "minimal": "sensitive_rules_minimal.json (10个规则，快速扫描)"
+    }
+  },
+  
+  "output_settings": {
+    "_comment": "输出配置",
+    "format": "json",
+    "output_file": "results.jsonl",
+    "json_mode": "line",
+    "include_all": true,
+    "verbose": true,
+    "output_dir": "./output"
+  },
+  
+  "log_settings": {
+    "_comment": "日志配置",
+    "level": "INFO",
+    "output_file": "",
+    "format": "json",
+    "show_metrics": false
+  },
+  
+  "pipeline_settings": {
+    "_comment": "管道模式配置",
+    "enabled": false,
+    "enable_stdin": true,
+    "enable_stdout": true,
+    "input_format": "text",
+    "output_format": "jsonl",
+    "quiet": false
+  }
+}
+

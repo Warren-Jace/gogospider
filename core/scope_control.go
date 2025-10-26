@@ -279,12 +279,17 @@ func (sc *ScopeController) checkExtension(path string) bool {
 		return true
 	}
 	
-	// 1. 检查排除列表
-	for _, excludeExt := range sc.config.ExcludeExtensions {
-		if ext == strings.ToLower(excludeExt) {
-			return false
-		}
-	}
+	// 🔧 v3.1: exclude_extensions不再阻止URL进入作用域
+	// URL会被记录，但在请求前判断是否需要访问
+	// JS/CSS文件始终需要访问（可能包含隐藏URL和敏感信息）
+	
+	// 1. 检查排除列表（但不返回false，只做标记）
+	// 注释掉原来的逻辑
+	// for _, excludeExt := range sc.config.ExcludeExtensions {
+	// 	if ext == strings.ToLower(excludeExt) {
+	// 		return false
+	// 	}
+	// }
 	
 	// 2. 如果有包含列表，必须匹配
 	if len(sc.config.IncludeExtensions) > 0 {
@@ -297,6 +302,52 @@ func (sc *ScopeController) checkExtension(path string) bool {
 	}
 	
 	return true
+}
+
+// ShouldRequestURL 判断URL是否需要发起HTTP请求
+// 返回值: (是否请求, 原因)
+func (sc *ScopeController) ShouldRequestURL(urlStr string) (bool, string) {
+	// 解析URL
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false, "URL解析失败"
+	}
+	
+	path := parsedURL.Path
+	
+	// 提取扩展名
+	ext := ""
+	if idx := strings.LastIndex(path, "."); idx != -1 {
+		ext = strings.ToLower(path[idx+1:])
+	}
+	
+	// 没有扩展名，需要请求
+	if ext == "" {
+		return true, "无扩展名"
+	}
+	
+	// 🎯 JS文件始终需要请求（可能包含隐藏URL、API端点、敏感信息）
+	jsExtensions := []string{"js", "jsx", "mjs", "ts", "tsx"}
+	for _, jsExt := range jsExtensions {
+		if ext == jsExt {
+			return true, "JS文件需要分析"
+		}
+	}
+	
+	// 🎯 CSS文件也需要请求（可能包含URL）
+	if ext == "css" || ext == "scss" || ext == "sass" {
+		return true, "CSS文件需要分析"
+	}
+	
+	// 检查是否在排除列表中
+	for _, excludeExt := range sc.config.ExcludeExtensions {
+		if ext == strings.ToLower(excludeExt) {
+			return false, fmt.Sprintf("扩展名%s在排除列表，只记录不请求", ext)
+		}
+	}
+	
+	// 默认需要请求
+	return true, "默认需要请求"
 }
 
 // checkParams 检查URL参数

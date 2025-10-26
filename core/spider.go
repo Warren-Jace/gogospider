@@ -34,9 +34,10 @@ type Spider struct {
 	workerPool          *WorkerPool  // 并发工作池
 
 	// 新增优化组件
-	formFiller    *SmartFormFiller      // 智能表单填充器
-	advancedScope *AdvancedScope        // 高级作用域控制
-	perfOptimizer *PerformanceOptimizer // 性能优化器
+	formFiller       *SmartFormFiller      // 智能表单填充器
+	advancedScope    *AdvancedScope        // 高级作用域控制
+	scopeController  *ScopeController      // 作用域控制器（v3.1）
+	perfOptimizer    *PerformanceOptimizer // 性能优化器
 
 	// 高级功能组件
 	techDetector       *TechStackDetector     // 技术栈检测器
@@ -131,9 +132,10 @@ func NewSpider(cfg *config.Config) *Spider {
 		workerPool:      NewWorkerPool(workerCount, maxQPS), // 初始化工作池
 
 		// 初始化新增组件
-		formFiller:    NewSmartFormFiller(),         // 智能表单填充器
-		advancedScope: nil,                          // 将在Start中初始化
-		perfOptimizer: NewPerformanceOptimizer(500), // 性能优化器（限制500MB）
+		formFiller:      NewSmartFormFiller(),         // 智能表单填充器
+		advancedScope:   nil,                          // 将在Start中初始化
+		scopeController: nil,                          // 将在Start中初始化（v3.1）
+		perfOptimizer:   NewPerformanceOptimizer(500), // 性能优化器（限制500MB）
 
 		// 初始化高级功能组件
 		techDetector:      NewTechStackDetector(),         // 技术栈检测器
@@ -242,6 +244,29 @@ func (s *Spider) Start(targetURL string) error {
 	s.advancedScope = NewAdvancedScope(s.targetDomain)
 	s.advancedScope.SetMode(ScopeRDN)         // 根域名模式
 	s.advancedScope.PresetStaticFilterScope() // 过滤静态资源
+	
+	// 🆕 v3.1: 初始化作用域控制器
+	scopeConfig := ScopeConfig{
+		IncludeDomains:    s.config.ScopeSettings.IncludeDomains,
+		ExcludeDomains:    s.config.ScopeSettings.ExcludeDomains,
+		IncludePaths:      s.config.ScopeSettings.IncludePaths,
+		ExcludePaths:      s.config.ScopeSettings.ExcludePaths,
+		IncludeRegex:      s.config.ScopeSettings.IncludeRegex,
+		ExcludeRegex:      s.config.ScopeSettings.ExcludeRegex,
+		IncludeExtensions: s.config.ScopeSettings.IncludeExtensions,
+		ExcludeExtensions: s.config.ScopeSettings.ExcludeExtensions,
+		IncludeParams:     []string{}, // 暂不支持参数过滤
+		ExcludeParams:     []string{}, // 暂不支持参数过滤
+		MaxDepth:          s.config.DepthSettings.MaxDepth,
+		AllowSubdomains:   s.config.ScopeSettings.AllowSubdomains,
+		StayInDomain:      s.config.ScopeSettings.StayInDomain,
+		AllowHTTP:         s.config.ScopeSettings.AllowHTTP,
+		AllowHTTPS:        s.config.ScopeSettings.AllowHTTPS,
+	}
+	s.scopeController, err = NewScopeController(scopeConfig)
+	if err != nil {
+		return fmt.Errorf("初始化作用域控制器失败: %v", err)
+	}
 
 	// 初始化子域名提取器
 	s.subdomainExtractor = NewSubdomainExtractor(targetURL)
@@ -1215,19 +1240,18 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 	skippedByResourceType := 0 // 🆕 统计资源分类跳过的数量（静态资源/域外）
 	
 	for link := range allLinks {
-		// 🆕 v2.7+: 资源分类检查（最优先）
-		if s.resourceClassifier != nil {
-			resType, shouldRequest := s.resourceClassifier.ClassifyURL(link)
+		// 🆕 v3.1: 使用exclude_extensions判断是否需要请求
+		// JS/CSS文件始终请求，其他被排除的扩展名只记录不请求
+		if s.scopeController != nil {
+			shouldRequest, reason := s.scopeController.ShouldRequestURL(link)
 			if !shouldRequest {
-				// 静态资源和域外URL只收集不请求
 				skippedByResourceType++
 				if skippedByResourceType <= 5 {
-					typeStr := s.resourceClassifier.GetResourceTypeString(resType)
-					s.logger.Debug("资源分类跳过",
+					s.logger.Debug("扩展名过滤：只记录不请求",
 						"url", link,
-						"type", typeStr,
-						"reason", "只收集不请求")
+						"reason", reason)
 				}
+				// URL已被记录（在addResult中），这里只是跳过HTTP请求
 				continue
 			}
 		}
@@ -1311,9 +1335,9 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 		fmt.Printf("  [URL模式去重] 本层跳过 %d 个重复模式URL\n", skippedByPattern)
 	}
 	
-	// 🆕 v2.7+: 打印资源分类统计
+	// 🆕 v3.1: 打印扩展名过滤统计
 	if skippedByResourceType > 0 {
-		fmt.Printf("  [资源分类] 本层跳过 %d 个静态资源/域外URL（已收集不请求）\n", skippedByResourceType)
+		fmt.Printf("  [扩展名过滤] 本层跳过 %d 个静态资源URL（已记录不请求，JS/CSS除外）\n", skippedByResourceType)
 	}
 
 	// 优先级排序（🆕 传入实际深度，用于精确优先级计算）

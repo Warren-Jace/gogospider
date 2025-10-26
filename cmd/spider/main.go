@@ -17,6 +17,178 @@ import (
 	"spider-golang/core"
 )
 
+// printUsage 打印自定义的帮助信息
+func printUsage() {
+	fmt.Fprintf(os.Stderr, `
+╔════════════════════════════════════════════════════════════════╗
+║              GogoSpider v3.0 - 智能Web爬虫工具                 ║
+║                    参数使用指南                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+📖 使用方法:
+  spider [选项]
+
+═══════════════════════════════════════════════════════════════
+
+📂 参数分类:
+
+【核心参数】
+  -url string
+        🔴 目标URL（必需）
+  -config string
+        配置文件路径
+  -version
+        显示版本信息
+
+【基础参数】
+  -depth int
+        最大爬取深度 (默认: 3, 推荐: 快速2/深度5-8)
+  -max-pages int
+        最大页面数 (默认: 100, 推荐: 快速50/深度1000+)
+  -workers int
+        并发线程数 (默认: 10, 推荐: 快速5/深度20-50)
+  -mode string
+        爬取模式: static/dynamic/smart (默认: smart)
+  -timeout int
+        请求超时时间（秒）(默认: 30)
+
+【作用域控制】
+  -include-domains string
+        只爬取这些域名（逗号分隔，支持*.example.com）
+  -exclude-domains string
+        排除这些域名（逗号分隔）
+  -include-paths string
+        只爬取这些路径（逗号分隔，支持/api/*）
+  -exclude-paths string
+        排除这些路径（逗号分隔）
+  -include-ext string
+        只爬取这些扩展名（逗号分隔，如: php,jsp,aspx）
+  -exclude-ext string
+        排除这些扩展名（逗号分隔，如: jpg,png,css,js）
+        💡 推荐始终配置，排除静态资源可提高效率70%%+
+  -allow-subdomains
+        允许爬取子域名
+
+【网络和代理】
+  -proxy string
+        代理服务器地址（如: http://127.0.0.1:8080）
+  -user-agent string
+        自定义User-Agent
+  -headers string
+        自定义HTTP头（JSON格式）
+  -cookie-file string
+        Cookie文件路径
+
+【速率控制】
+  -rate-limit int
+        每秒最大请求数 (默认: 100)
+  -rate-limit-enable
+        启用速率限制
+  -burst int
+        允许突发请求数 (默认: 10)
+  -min-delay int
+        最小请求间隔（毫秒）
+  -max-delay int
+        最大请求间隔（毫秒）
+  -adaptive-rate
+        启用自适应速率控制
+
+【敏感信息检测】
+  -sensitive-detect
+        启用敏感信息检测（默认: true）
+  -sensitive-rules string
+        敏感信息规则文件
+        💡 推荐: sensitive_rules_standard.json (40个规则)
+        可选: sensitive_rules_minimal.json (10个规则，快速)
+  -sensitive-min-severity string
+        最低严重级别: LOW/MEDIUM/HIGH (默认: LOW)
+  -sensitive-scan-body
+        扫描响应体（默认: true）
+  -sensitive-scan-headers
+        扫描响应头（默认: true）
+
+【输出控制】
+  -output string
+        输出目录 (默认: ./)
+  -output-file string
+        输出文件路径
+  -format string
+        输出格式: text/json/urls-only (默认: text)
+  -json
+        启用JSON输出
+  -quiet
+        静默模式
+  -simple
+        简洁模式（只输出URL）
+
+【批量扫描】
+  -batch-file string
+        批量扫描URL列表文件（每行一个URL）
+  -batch-concurrency int
+        批量扫描并发数 (默认: 5)
+
+【日志和调试】
+  -log-level string
+        日志级别: debug/info/warn/error (默认: info)
+  -log-file string
+        日志文件路径
+  -show-metrics
+        显示实时监控指标
+
+【高级参数】
+  -chrome-path string
+        Chrome浏览器路径
+  -ignore-robots
+        忽略robots.txt
+  -stdin
+        从标准输入读取URL
+
+═══════════════════════════════════════════════════════════════
+
+🎯 快速开始场景:
+
+  场景1: 快速扫描（新手推荐）
+    spider -url https://example.com
+
+  场景2: 深度扫描
+    spider -url https://example.com -depth 5 -max-pages 1000 -workers 20
+
+  场景3: API接口发现
+    spider -url https://example.com -include-paths "/api/*,/v1/*" -exclude-ext "jpg,png,css,js"
+
+  场景4: 隐蔽扫描（低速）
+    spider -url https://example.com -rate-limit 5 -min-delay 500 -max-delay 2000
+
+  场景5: 批量扫描
+    spider -batch-file targets.txt -batch-concurrency 10
+
+  场景6: 敏感信息扫描
+    spider -url https://example.com -sensitive-rules sensitive_rules_standard.json
+
+═══════════════════════════════════════════════════════════════
+
+💡 使用建议:
+
+1. 根据目标选择合适的深度和并发:
+   小型站点: -depth 3 -max-pages 100 -workers 10
+   中型站点: -depth 5 -max-pages 500 -workers 20
+   大型站点: -depth 8 -max-pages 2000 -workers 50
+
+2. 敏感信息检测推荐配置:
+   日常使用: -sensitive-rules sensitive_rules_standard.json
+   快速扫描: -sensitive-rules sensitive_rules_minimal.json
+   全面审计: -sensitive-rules sensitive_rules_config.json
+
+═══════════════════════════════════════════════════════════════
+
+📚 详细文档:
+  - 参数指南: PARAMETERS_GUIDE.md
+  - 配置FAQ: CONFIGURATION_FAQ.md
+  - 项目主页: https://github.com/Warren-Jace/gogospider
+
+`)
+}
+
 var (
 	targetURL       string
 	mode            string
@@ -100,6 +272,9 @@ var (
 )
 
 func init() {
+	// 自定义帮助信息
+	flag.Usage = printUsage
+	
 	flag.StringVar(&targetURL, "url", "", "目标URL（必需）")
 	flag.StringVar(&mode, "mode", "smart", "爬取模式: static, dynamic, smart（默认）")
 	flag.IntVar(&maxDepth, "depth", 3, "最大爬取深度")
