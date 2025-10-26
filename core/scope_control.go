@@ -326,23 +326,40 @@ func (sc *ScopeController) ShouldRequestURL(urlStr string) (bool, string) {
 		return true, "无扩展名"
 	}
 	
-	// 🎯 JS文件始终需要请求（可能包含隐藏URL、API端点、敏感信息）
+	// ✅ 修复6: JS文件始终需要请求（可能包含隐藏URL、API端点、敏感信息）
 	jsExtensions := []string{"js", "jsx", "mjs", "ts", "tsx"}
 	for _, jsExt := range jsExtensions {
 		if ext == jsExt {
-			return true, "JS文件需要分析"
+			return true, "JS文件需要访问和分析"
 		}
 	}
 	
-	// 🎯 CSS文件也需要请求（可能包含URL）
-	if ext == "css" || ext == "scss" || ext == "sass" {
-		return true, "CSS文件需要分析"
+	// ✅ 修复7: 静态资源（图片、CSS、字体等）只记录不请求
+	staticExtensions := []string{
+		"css", "scss", "sass", // 样式文件
+		"jpg", "jpeg", "png", "gif", "svg", "ico", "webp", "bmp", // 图片
+		"woff", "woff2", "ttf", "eot", "otf", // 字体
+		"mp4", "mp3", "avi", "mov", "wmv", "flv", "webm", "ogg", "wav", // 音视频
+		"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", // 文档
+		"zip", "rar", "tar", "gz", "7z", // 压缩包
 	}
 	
-	// 检查是否在排除列表中
+	for _, staticExt := range staticExtensions {
+		if ext == staticExt {
+			return false, fmt.Sprintf("静态资源（%s）已记录,不请求", ext)
+		}
+	}
+	
+	// 检查是否在配置的排除列表中（但JS已特殊处理）
 	for _, excludeExt := range sc.config.ExcludeExtensions {
-		if ext == strings.ToLower(excludeExt) {
-			return false, fmt.Sprintf("扩展名%s在排除列表，只记录不请求", ext)
+		excludeExtLower := strings.ToLower(excludeExt)
+		// 跳过JS（已在上方特殊处理）
+		if excludeExtLower == "js" || excludeExtLower == "jsx" || excludeExtLower == "mjs" || 
+		   excludeExtLower == "ts" || excludeExtLower == "tsx" {
+			continue
+		}
+		if ext == excludeExtLower {
+			return false, fmt.Sprintf("排除扩展名（%s）已记录,不请求", ext)
 		}
 	}
 	

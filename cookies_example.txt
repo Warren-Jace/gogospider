@@ -1,0 +1,14 @@
+# Cookie示例文件（简单格式）
+# 使用说明：
+# 1. 在浏览器中登录目标网站
+# 2. 按F12 → Application → Cookies → 找到并复制Cookie值
+# 3. 替换下面的示例值为真实值
+# 4. 使用：spider.exe -url <target> -cookie-file cookies.txt
+
+# 格式：每行一个Cookie，name=value
+
+session_id=请替换为您的session_id值
+auth_token=请替换为您的auth_token值
+user_id=请替换为您的user_id值
+lang=zh-CN
+

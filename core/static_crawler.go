@@ -1,8 +1,10 @@
 package core
 
 import (
+	"crypto/tls"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"path"
 	"regexp"
@@ -22,6 +24,8 @@ type StaticCrawlerImpl struct {
 	stopChan         chan struct{}
 	duplicateHandler *DuplicateHandler
 	paramHandler     *ParamHandler
+	cookieManager    *CookieManager    // Cookie管理器（v3.2新增）
+	redirectManager  *RedirectManager  // 重定向管理器（v3.2新增）
 }
 
 
@@ -67,6 +71,16 @@ func (s *StaticCrawlerImpl) Configure(config *config.Config) {
 	})
 }
 
+// SetCookieManager 设置Cookie管理器（v3.2新增）
+func (s *StaticCrawlerImpl) SetCookieManager(cm *CookieManager) {
+	s.cookieManager = cm
+}
+
+// SetRedirectManager 设置重定向管理器（v3.2新增）
+func (s *StaticCrawlerImpl) SetRedirectManager(rm *RedirectManager) {
+	s.redirectManager = rm
+}
+
 // Crawl 执行爬取
 func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	result := &Result{
@@ -84,6 +98,13 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		colly.Async(true),
 	)
 	
+	// ✅ 修复5: 配置HTTPS证书验证
+	if s.config.AntiDetectionSettings.InsecureSkipVerify {
+		collector.WithTransport(&http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		})
+	}
+	
 	// 设置并发限制
 	collector.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
@@ -91,7 +112,7 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		Delay:       time.Duration(500) * time.Millisecond,
 	})
 	
-	// 设置请求前回调，实现User-Agent轮换和域名范围检查
+	// 设置请求前回调，实现User-Agent轮换、域名范围检查和Cookie应用
 	collector.OnRequest(func(r *colly.Request) {
 		// 检查域名范围限制
 		if s.config.StrategySettings.DomainScope != "" {
@@ -118,6 +139,14 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			randIndex := rand.Intn(len(s.config.AntiDetectionSettings.UserAgents))
 			userAgent := s.config.AntiDetectionSettings.UserAgents[randIndex]
 			r.Headers.Set("User-Agent", userAgent)
+		}
+		
+		// 🆕 v3.2: 应用Cookie（如果已加载）
+		if s.cookieManager != nil && s.cookieManager.GetCookieCount() > 0 {
+			cookieHeader := s.cookieManager.GetCookieHeader()
+			if cookieHeader != "" {
+				r.Headers.Set("Cookie", cookieHeader)
+			}
 		}
 	})
 	
@@ -511,6 +540,26 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	collector.OnResponse(func(r *colly.Response) {
 		result.StatusCode = r.StatusCode
 		result.ContentType = r.Headers.Get("Content-Type")
+		
+		// 🆕 v3.2: 检测重定向（通过响应码和Location头）
+		if s.redirectManager != nil {
+			if r.StatusCode >= 300 && r.StatusCode < 400 {
+				locationHeader := r.Headers.Get("Location")
+				if locationHeader != "" {
+					redirectInfo := s.redirectManager.RecordRedirect(
+						r.Request.URL.String(),
+						locationHeader,
+						r.StatusCode,
+					)
+					
+					// 如果是认证重定向，记录并可能警告
+					if redirectInfo.IsAuthRedirect {
+						fmt.Printf("⚠️  [认证重定向] %s → %s\n", 
+							redirectInfo.OriginalURL, redirectInfo.FinalURL)
+					}
+				}
+			}
+		}
 		
 		// 保存HTML内容和Headers供高级检测使用
 		result.HTMLContent = string(r.Body)

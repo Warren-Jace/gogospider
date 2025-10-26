@@ -2,69 +2,75 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
 // Config 爬虫配置结构体
 type Config struct {
 	// 目标URL
-	TargetURL string
+	TargetURL string `json:"target_url"`
 
 	// 爬取深度设置
-	DepthSettings DepthSettings
+	DepthSettings DepthSettings `json:"depth_settings"`
 
 	// 爬取策略设置
-	StrategySettings StrategySettings
+	StrategySettings StrategySettings `json:"strategy_settings"`
 
 	// 反爬设置
-	AntiDetectionSettings AntiDetectionSettings
+	AntiDetectionSettings AntiDetectionSettings `json:"anti_detection_settings"`
 
 	// 去重设置
-	DeduplicationSettings DeduplicationSettings
+	DeduplicationSettings DeduplicationSettings `json:"deduplication_settings"`
 
 	// 日志设置（v2.6 新增）
-	LogSettings LogSettings
+	LogSettings LogSettings `json:"log_settings"`
 	
 	// 🆕 v2.9 新增功能
-	OutputSettings OutputSettings         // 输出设置
-	RateLimitSettings RateLimitSettings   // 速率限制设置
-	ExternalSourceSettings ExternalSourceSettings // 外部数据源设置
-	ScopeSettings ScopeSettings           // Scope设置
-	PipelineSettings PipelineSettings     // 管道模式设置
+	OutputSettings OutputSettings         `json:"output_settings"` // 输出设置
+	RateLimitSettings RateLimitSettings   `json:"rate_limit_settings"` // 速率限制设置
+	ExternalSourceSettings ExternalSourceSettings `json:"external_source_settings"` // 外部数据源设置
+	ScopeSettings ScopeSettings           `json:"scope_settings"` // Scope设置
+	PipelineSettings PipelineSettings     `json:"pipeline_settings"` // 管道模式设置
 	
 	// 🆕 敏感信息检测设置
-	SensitiveDetectionSettings SensitiveDetectionSettings // 敏感信息检测设置
+	SensitiveDetectionSettings SensitiveDetectionSettings `json:"sensitive_detection_settings"` // 敏感信息检测设置
 	
 	// 🆕 v3.0 新增功能
-	BlacklistSettings BlacklistSettings   // 黑名单设置
-	BatchScanSettings BatchScanSettings   // 批量扫描设置
+	BlacklistSettings BlacklistSettings   `json:"blacklist_settings"` // 黑名单设置
+	BatchScanSettings BatchScanSettings   `json:"batch_scan_settings"` // 批量扫描设置
+	
+	// 🆕 v3.4 新增功能
+	SchedulingSettings SchedulingSettings `json:"scheduling_settings"` // 调度策略设置
+	AdvancedSettings   AdvancedSettings   `json:"advanced_settings"`   // 高级功能设置
+	OutputAdvanced     OutputAdvanced     `json:"output_advanced"`     // 输出增强配置
 }
 
 // DepthSettings 爬取深度设置
 type DepthSettings struct {
 	// 最大深度
-	MaxDepth int
+	MaxDepth int `json:"max_depth"`
 
 	// 是否深度爬取
-	DeepCrawling bool
+	DeepCrawling bool `json:"deep_crawling"`
 
 	// 调度算法 DFS/BFS
-	SchedulingAlgorithm string
+	SchedulingAlgorithm string `json:"scheduling_algorithm"`
 }
 
 // StrategySettings 爬取策略设置
 type StrategySettings struct {
 	// 是否启用静态爬虫
-	EnableStaticCrawler bool
+	EnableStaticCrawler bool `json:"enable_static_crawler"`
 
 	// 是否启用动态爬虫
-	EnableDynamicCrawler bool
+	EnableDynamicCrawler bool `json:"enable_dynamic_crawler"`
 
 	// 是否启用JS分析
-	EnableJSAnalysis bool
+	EnableJSAnalysis bool `json:"enable_js_analysis"`
 
 	// 是否启用API推测
-	EnableAPIInference bool
+	EnableAPIInference bool `json:"enable_api_inference"`
 
 	// 参数爆破功能已移除（专注于纯爬虫功能）
 	// EnableParamFuzzing bool (已废弃)
@@ -73,26 +79,101 @@ type StrategySettings struct {
 	// POSTParamFuzzLimit int (已废弃)
 
 	// 域名范围限制
-	DomainScope string
+	DomainScope string `json:"domain_scope"`
 	
-	// 🆕 v2.8 新增配置
-	UsePriorityQueue     bool // 是否使用优先级队列模式（默认false，使用BFS）
-	EnableCommonPathScan bool // 是否启用200个常见路径扫描（默认false，性能考虑）
+	// 🆕 v2.8 新增配置（已废弃，使用SchedulingSettings替代）
+	UsePriorityQueue     bool `json:"use_priority_queue"`      // 是否使用优先级队列模式（默认false，使用BFS）
+	EnableCommonPathScan bool `json:"enable_common_path_scan"` // 是否启用200个常见路径扫描（默认false，性能考虑）
+}
+
+// SchedulingSettings 调度策略设置（v3.4新增）
+type SchedulingSettings struct {
+	// 调度算法: BFS, DFS, PRIORITY_QUEUE, HYBRID
+	Algorithm string `json:"algorithm"`
+	
+	// 混合策略配置
+	HybridConfig HybridSchedulingConfig `json:"hybrid_config"`
+	
+	// 性能配置
+	PerformanceConfig PerformanceConfig `json:"performance_config"`
+}
+
+// HybridSchedulingConfig 混合调度策略配置
+type HybridSchedulingConfig struct {
+	// 是否启用自适应学习
+	EnableAdaptiveLearning bool `json:"enable_adaptive_learning"`
+	
+	// 优先级权重
+	PriorityWeights PriorityWeights `json:"priority_weights"`
+	
+	// 每层最多爬取数量（0=不限制）
+	MaxURLsPerLayer int `json:"max_urls_per_layer"`
+	
+	// 高价值URL阈值（高于此值的总是优先）
+	HighValueThreshold float64 `json:"high_value_threshold"`
+	
+	// 学习率（自适应调整的速度，0.1-0.5）
+	LearningRate float64 `json:"learning_rate"`
+}
+
+// PriorityWeights 优先级权重配置
+type PriorityWeights struct {
+	Depth         float64 `json:"depth"`          // 深度因子权重（浅层优先）
+	Internal      float64 `json:"internal"`       // 域内链接权重
+	Params        float64 `json:"params"`         // 参数权重（带参数的URL更重要）
+	Recent        float64 `json:"recent"`         // 新鲜度权重（新发现的URL）
+	PathValue     float64 `json:"path_value"`     // 路径价值权重（/admin, /api等）
+	BusinessValue float64 `json:"business_value"` // 业务价值权重（结合业务感知过滤器）
+}
+
+// PerformanceConfig 性能配置
+type PerformanceConfig struct {
+	MaxConcurrentRequests int  `json:"max_concurrent_requests"` // 最大并发请求数
+	RequestTimeout        int  `json:"request_timeout"`         // 请求超时时间（秒）
+	MaxRetry              int  `json:"max_retry"`               // 最大重试次数
+	EnableConnectionPool  bool `json:"enable_connection_pool"`  // 启用连接池
+	MaxMemoryMB           int  `json:"max_memory_mb"`           // 最大内存使用（MB）
+	EnableDiskCache       bool `json:"enable_disk_cache"`       // 启用磁盘缓存
+}
+
+// AdvancedSettings 高级功能设置（v3.4新增）
+type AdvancedSettings struct {
+	EnableSmartThrottling        bool `json:"enable_smart_throttling"`         // 智能限速
+	EnableCDNOptimization        bool `json:"enable_cdn_optimization"`         // CDN优化
+	EnableGraphQLDetection       bool `json:"enable_graphql_detection"`        // GraphQL检测
+	EnableWebSocketMonitoring    bool `json:"enable_websocket_monitoring"`     // WebSocket监控
+	EnableAPIVersioningDetection bool `json:"enable_api_versioning_detection"` // API版本检测
+}
+
+// OutputAdvanced 输出增强配置（v3.4新增）
+type OutputAdvanced struct {
+	SaveCrawlTimeline          bool `json:"save_crawl_timeline"`           // 保存爬取时间线
+	SavePriorityDistribution   bool `json:"save_priority_distribution"`    // 保存优先级分布
+	SaveBusinessValueAnalysis  bool `json:"save_business_value_analysis"`  // 保存业务价值分析
+	EnableRealtimeDashboard    bool `json:"enable_realtime_dashboard"`     // 启用实时仪表板
+	DashboardPort              int  `json:"dashboard_port"`                // 仪表板端口
 }
 
 // AntiDetectionSettings 反爬设置
 type AntiDetectionSettings struct {
 	// 请求间隔
-	RequestDelay time.Duration
+	RequestDelay time.Duration `json:"request_delay"`
 
 	// User-Agent列表
-	UserAgents []string
+	UserAgents []string `json:"user_agents"`
 
 	// 代理列表
-	Proxies []string
+	Proxies []string `json:"proxies"`
 
 	// 是否启用表单自动填充
-	EnableFormAutoFill bool
+	EnableFormAutoFill bool `json:"enable_form_auto_fill"`
+	
+	// ✅ 修复2: Cookie配置（统一在配置文件中管理）
+	CookieFile   string `json:"cookie_file"`   // Cookie文件路径（JSON或文本格式）
+	CookieString string `json:"cookie_string"` // Cookie字符串（格式：name1=value1; name2=value2）
+	
+	// ✅ 修复5: HTTPS证书验证配置
+	InsecureSkipVerify bool `json:"insecure_skip_verify"` // 是否忽略HTTPS证书错误（默认false）
 }
 
 // DeduplicationSettings 去重设置
@@ -386,6 +467,9 @@ func NewDefaultConfig() *Config {
 			},
 			Proxies:            []string{},
 			EnableFormAutoFill: true, // 启用表单自动填充
+			CookieFile:         "",   // Cookie文件路径（留空表示不使用）
+			CookieString:       "",   // Cookie字符串（留空表示不使用）
+			InsecureSkipVerify: false, // ✅ 默认验证HTTPS证书
 		},
 		DeduplicationSettings: DeduplicationSettings{
 			SimilarityThreshold:           0.85, // 85%相似度阈值
@@ -447,7 +531,7 @@ func NewDefaultConfig() *Config {
 		},
 		
 		ScopeSettings: ScopeSettings{
-			Enabled:           false,   // 默认不启用Scope控制
+			Enabled:           true,   // ✅ 修复4: 默认启用Scope控制
 			IncludeDomains:    []string{},
 			ExcludeDomains:    []string{},
 			IncludePaths:      []string{},
@@ -456,12 +540,15 @@ func NewDefaultConfig() *Config {
 			ExcludeRegex:      "",
 			IncludeExtensions: []string{},
 			ExcludeExtensions: []string{
-				"jpg", "jpeg", "png", "gif", "svg", "ico",
-				"css", "js", "woff", "woff2", "ttf", "eot",
-				"mp4", "mp3", "avi", "mov",
-				"pdf", "doc", "docx", "xls", "xlsx",
-				"zip", "rar", "tar", "gz",
-			}, // 默认排除静态资源
+				// ✅ 修复6&7: JS已从排除列表移除,程序会自动处理
+				// 静态资源:图片、样式、字体、文档等(JS已特殊处理,会被访问)
+				"jpg", "jpeg", "png", "gif", "svg", "ico", "webp", "bmp",
+				"css", "scss", "sass",
+				"woff", "woff2", "ttf", "eot", "otf",
+				"mp4", "mp3", "avi", "mov", "wmv", "flv",
+				"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+				"zip", "rar", "tar", "gz", "7z",
+			}, // ✅ 默认排除静态资源(JS除外,会被特殊处理)
 			AllowSubdomains: false, // 默认不允许子域名
 			StayInDomain:    true,  // 默认限制在同一域名内
 			AllowHTTP:       true,  // 允许HTTP
@@ -511,6 +598,51 @@ func NewDefaultConfig() *Config {
 			SaveIndividualReports: true,
 			SaveSummaryReport:     true,
 		},
+		
+		// 🆕 v3.4: 调度策略默认配置
+		SchedulingSettings: SchedulingSettings{
+			Algorithm: "BFS", // 默认使用BFS（向下兼容）
+			HybridConfig: HybridSchedulingConfig{
+				EnableAdaptiveLearning: true,  // 启用自适应学习
+				PriorityWeights: PriorityWeights{
+					Depth:         3.0,  // 深度因子
+					Internal:      2.0,  // 域内链接
+					Params:        1.5,  // 参数
+					Recent:        1.0,  // 新鲜度
+					PathValue:     4.0,  // 路径价值
+					BusinessValue: 0.5,  // 业务价值
+				},
+				MaxURLsPerLayer:    100,  // 每层最多100个URL
+				HighValueThreshold: 80.0, // 高价值阈值80分
+				LearningRate:       0.15, // 学习率15%
+			},
+			PerformanceConfig: PerformanceConfig{
+				MaxConcurrentRequests: 20,   // 最大并发20
+				RequestTimeout:        30,   // 超时30秒
+				MaxRetry:              3,    // 最多重试3次
+				EnableConnectionPool:  true, // 启用连接池
+				MaxMemoryMB:           1024, // 最大内存1GB
+				EnableDiskCache:       false, // 默认不启用磁盘缓存
+			},
+		},
+		
+		// 🆕 v3.4: 高级功能默认配置
+		AdvancedSettings: AdvancedSettings{
+			EnableSmartThrottling:        true,  // 启用智能限速
+			EnableCDNOptimization:        true,  // 启用CDN优化
+			EnableGraphQLDetection:       true,  // 启用GraphQL检测
+			EnableWebSocketMonitoring:    false, // WebSocket监控（实验性，默认关闭）
+			EnableAPIVersioningDetection: true,  // 启用API版本检测
+		},
+		
+		// 🆕 v3.4: 输出增强默认配置
+		OutputAdvanced: OutputAdvanced{
+			SaveCrawlTimeline:         true,  // 保存爬取时间线
+			SavePriorityDistribution:  true,  // 保存优先级分布
+			SaveBusinessValueAnalysis: true,  // 保存业务价值分析
+			EnableRealtimeDashboard:   false, // 实时仪表板（默认关闭）
+			DashboardPort:             8080,  // 仪表板端口
+		},
 	}
 }
 
@@ -530,8 +662,23 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("最大深度不能超过20层（防止过度爬取），当前值: %d", c.DepthSettings.MaxDepth)
 	}
 
-	if c.DepthSettings.SchedulingAlgorithm != "BFS" && c.DepthSettings.SchedulingAlgorithm != "DFS" {
-		return fmt.Errorf("调度算法必须是 BFS 或 DFS，当前值: %s", c.DepthSettings.SchedulingAlgorithm)
+	// ✅ v3.4修复: 支持新的调度算法
+	// 优先检查新的SchedulingSettings.Algorithm
+	if c.SchedulingSettings.Algorithm != "" {
+		validAlgorithms := map[string]bool{
+			"BFS":            true,
+			"DFS":            true,
+			"PRIORITY_QUEUE": true,
+			"HYBRID":         true,
+		}
+		if !validAlgorithms[strings.ToUpper(c.SchedulingSettings.Algorithm)] {
+			return fmt.Errorf("调度算法必须是 BFS, DFS, PRIORITY_QUEUE 或 HYBRID，当前值: %s", c.SchedulingSettings.Algorithm)
+		}
+	} else if c.DepthSettings.SchedulingAlgorithm != "" {
+		// 向下兼容旧配置
+		if c.DepthSettings.SchedulingAlgorithm != "BFS" && c.DepthSettings.SchedulingAlgorithm != "DFS" {
+			return fmt.Errorf("调度算法必须是 BFS 或 DFS，当前值: %s", c.DepthSettings.SchedulingAlgorithm)
+		}
 	}
 
 	// 验证策略设置
@@ -564,9 +711,25 @@ func (c *Config) ValidateAndFix() error {
 		c.DepthSettings.MaxDepth = 20
 	}
 
-	// 修复调度算法
-	if c.DepthSettings.SchedulingAlgorithm != "BFS" && c.DepthSettings.SchedulingAlgorithm != "DFS" {
-		c.DepthSettings.SchedulingAlgorithm = "BFS"
+	// ✅ v3.4修复: 支持新的调度算法
+	// 优先检查新的SchedulingSettings.Algorithm
+	if c.SchedulingSettings.Algorithm != "" {
+		validAlgorithms := map[string]bool{
+			"BFS":            true,
+			"DFS":            true,
+			"PRIORITY_QUEUE": true,
+			"HYBRID":         true,
+		}
+		upperAlgo := strings.ToUpper(c.SchedulingSettings.Algorithm)
+		if !validAlgorithms[upperAlgo] {
+			// 无效算法，修复为BFS
+			c.SchedulingSettings.Algorithm = "BFS"
+		}
+	} else if c.DepthSettings.SchedulingAlgorithm != "" {
+		// 向下兼容旧配置
+		if c.DepthSettings.SchedulingAlgorithm != "BFS" && c.DepthSettings.SchedulingAlgorithm != "DFS" {
+			c.DepthSettings.SchedulingAlgorithm = "BFS"
+		}
 	}
 
 	// 修复相似度阈值

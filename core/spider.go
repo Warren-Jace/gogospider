@@ -55,6 +55,14 @@ type Spider struct {
 	urlDeduplicator     *URLDeduplicator        // URL去重器（忽略参数值）
 	urlStructureDedup   *URLStructureDeduplicator // URL结构化去重器（路径变量+参数）
 	priorityScheduler   *URLPriorityScheduler   // 优先级调度器（可选）
+	
+	// 🆕 v3.2 新增组件
+	cookieManager      *CookieManager      // Cookie管理器
+	loginWallDetector  *LoginWallDetector  // 登录墙检测器
+	redirectManager    *RedirectManager    // 重定向管理器
+	
+	// 🆕 v3.4 新增组件
+	adaptiveLearner    *AdaptivePriorityLearner // 自适应优先级学习器
 
 	results           []*Result
 	sitemapURLs       []string         // 从sitemap发现的URL
@@ -152,6 +160,14 @@ func NewSpider(cfg *config.Config) *Spider {
 		urlDeduplicator:    NewURLDeduplicator(),         // URL去重器
 		urlStructureDedup:  NewURLStructureDeduplicator(), // URL结构化去重器
 		priorityScheduler:  nil,                           // 将在Start中初始化（可选，需要配置）
+		
+		// 🆕 v3.2 新增组件
+		cookieManager:     NewCookieManager(),      // Cookie管理器
+		loginWallDetector: NewLoginWallDetector(),  // 登录墙检测器
+		redirectManager:   NewRedirectManager(),    // 重定向管理器
+		
+		// 🆕 v3.4 新增组件
+		adaptiveLearner:   nil,                     // 将在Start中初始化（如果启用）
 
 		hiddenPathDiscovery: nil, // 将在Start方法中初始化，需要用户代理
 		results:             make([]*Result, 0),
@@ -179,6 +195,12 @@ func NewSpider(cfg *config.Config) *Spider {
 
 	// 设置JS分析器的目标域名
 	spider.jsAnalyzer.SetTargetDomain(cfg.TargetURL)
+	
+	// 🆕 v3.2: 将Cookie管理器和重定向管理器传递给静态爬虫
+	if staticCrawlerImpl, ok := spider.staticCrawler.(*StaticCrawlerImpl); ok {
+		staticCrawlerImpl.SetCookieManager(spider.cookieManager)
+		staticCrawlerImpl.SetRedirectManager(spider.redirectManager)
+	}
 
 	return spider
 }
@@ -213,6 +235,27 @@ func (s *Spider) MergeSensitiveRules(filename string) error {
 		return fmt.Errorf("敏感信息检测器未初始化")
 	}
 	return s.sensitiveDetector.MergeRulesFromFile(filename)
+}
+
+// LoadCookieFromFile 从文件加载Cookie
+func (s *Spider) LoadCookieFromFile(filename string) error {
+	if s.cookieManager == nil {
+		return fmt.Errorf("Cookie管理器未初始化")
+	}
+	return s.cookieManager.LoadFromFile(filename)
+}
+
+// LoadCookieFromString 从字符串加载Cookie
+func (s *Spider) LoadCookieFromString(cookieString string) error {
+	if s.cookieManager == nil {
+		return fmt.Errorf("Cookie管理器未初始化")
+	}
+	return s.cookieManager.LoadFromString(cookieString)
+}
+
+// GetCookieManager 获取Cookie管理器
+func (s *Spider) GetCookieManager() *CookieManager {
+	return s.cookieManager
 }
 
 // Start 开始爬取
@@ -386,20 +429,57 @@ func (s *Spider) Start(targetURL string) error {
 
 	// 如果启用了递归爬取，继续爬取发现的链接
 	if s.config.DepthSettings.MaxDepth > 1 {
-		// 🆕 v2.8: 支持两种爬取模式
-		// 模式1: BFS（广度优先，默认）- 稳定可靠
-		// 模式2: Priority Queue（优先级队列）- 智能调度
+		// 🆕 v3.4: 支持四种调度算法
+		// 1. BFS: 广度优先（默认，全面覆盖）
+		// 2. DFS: 深度优先（快速深入）
+		// 3. PRIORITY_QUEUE: 纯优先级队列（智能但可能遗漏）
+		// 4. HYBRID: 混合策略（BFS框架+优先级排序，推荐）✨
 		
-		// 🆕 从配置中读取爬取模式
-		usePriorityQueue := s.config.StrategySettings.UsePriorityQueue
+		algorithm := strings.ToUpper(s.config.SchedulingSettings.Algorithm)
 		
-		if usePriorityQueue && s.priorityScheduler != nil {
-			// 使用优先级队列模式（实验性）
-			s.logger.Info("使用优先级队列模式爬取")
+		// 如果未配置，向下兼容旧配置
+		if algorithm == "" {
+			if s.config.StrategySettings.UsePriorityQueue {
+				algorithm = "PRIORITY_QUEUE"
+			} else {
+				algorithm = s.config.DepthSettings.SchedulingAlgorithm
+			}
+		}
+		
+		// 初始化自适应学习器（如果启用混合策略）
+		if algorithm == "HYBRID" && s.config.SchedulingSettings.HybridConfig.EnableAdaptiveLearning {
+			learningRate := s.config.SchedulingSettings.HybridConfig.LearningRate
+			s.adaptiveLearner = NewAdaptivePriorityLearner(learningRate)
+			s.logger.Info("自适应优先级学习器已启用", 
+				"learning_rate", learningRate)
+		}
+		
+		// 根据算法选择爬取策略
+		switch algorithm {
+		case "HYBRID":
+			// 混合策略：BFS框架 + 智能优先级排序（推荐）
+			s.logger.Info("使用混合调度策略", "algorithm", "HYBRID")
+			s.crawlWithHybridStrategy()
+			
+		case "PRIORITY_QUEUE":
+			// 纯优先级队列模式
+			s.logger.Info("使用优先级队列模式", "algorithm", "PRIORITY_QUEUE")
 			s.crawlWithPriorityQueue()
-		} else {
-			// 使用BFS模式（默认，推荐）
+			
+		case "DFS":
+			// 深度优先（暂未实现，回退到BFS）
+			s.logger.Warn("DFS模式暂未实现，回退到BFS", "algorithm", "DFS")
 			s.crawlRecursivelyMultiLayer()
+			
+		default:
+			// BFS模式（默认）
+			s.logger.Info("使用BFS模式", "algorithm", "BFS")
+			s.crawlRecursivelyMultiLayer()
+		}
+		
+		// 打印自适应学习报告（如果启用）
+		if s.adaptiveLearner != nil {
+			s.adaptiveLearner.PrintReport()
 		}
 	}
 
@@ -461,10 +541,21 @@ func (s *Spider) isInTargetDomain(urlStr string) bool {
 	return false
 }
 
-// addResult 添加爬取结果（增强版：包含DOM相似度检测、技术栈检测和敏感信息检测）
+// addResult 添加爬取结果（增强版：包含DOM相似度检测、技术栈检测、敏感信息检测和登录墙检测）
 func (s *Spider) addResult(result *Result) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	
+	// 🆕 v3.2 登录墙检测
+	if s.loginWallDetector != nil && result != nil {
+		s.loginWallDetector.RecordPage(result.URL, result.HTMLContent)
+		
+		// 如果登录墙占比过高，发出警告
+		if s.loginWallDetector.ShouldWarn() && len(s.results) % 100 == 0 {
+			// 每100个页面检查一次
+			s.loginWallDetector.PrintWarning()
+		}
+	}
 	
 	// 🆕 将域内URL添加到去重器（只添加目标域名的URL）
 	if s.urlDeduplicator != nil && result != nil {
@@ -1114,18 +1205,42 @@ func (s *Spider) analyzeExternalJS(jsURL string) []string {
 	// 合并所有发现的URL
 	urls := make([]string, 0)
 	seen := make(map[string]bool)
+	relativeURLs := make([]string, 0)  // ✅ 修复9: 收集相对URL
 
 	for category, categoryURLs := range enhancedResult {
-		for _, url := range categoryURLs {
-			if !seen[url] {
-				seen[url] = true
-				urls = append(urls, url)
+		for _, discoveredURL := range categoryURLs {
+			if !seen[discoveredURL] {
+				seen[discoveredURL] = true
+				
+				// ✅ 修复9: 检查是否为相对URL或路径
+				if isRelativeURL(discoveredURL) {
+					relativeURLs = append(relativeURLs, discoveredURL)
+				} else {
+					urls = append(urls, discoveredURL)
+				}
 			}
 		}
 
 		// 打印各类别的发现
 		if len(categoryURLs) > 0 {
 			fmt.Printf("    [%s] 发现 %d 个URL\n", category, len(categoryURLs))
+		}
+	}
+	
+	// ✅ 修复9: 将相对URL与目标域名拼接
+	if len(relativeURLs) > 0 {
+		fmt.Printf("    [CDN JS拼接] 发现 %d 个相对URL,与目标域名拼接...\n", len(relativeURLs))
+		baseURL := fmt.Sprintf("https://%s", s.targetDomain)
+		if parsedBase, err := url.Parse(baseURL); err == nil {
+			for _, relURL := range relativeURLs {
+				absoluteURL := parsedBase.ResolveReference(&url.URL{Path: relURL})
+				fullURL := absoluteURL.String()
+				if !seen[fullURL] {
+					seen[fullURL] = true
+					urls = append(urls, fullURL)
+					fmt.Printf("      拼接: %s + %s = %s\n", baseURL, relURL, fullURL)
+				}
+			}
 		}
 	}
 
@@ -1238,8 +1353,23 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 	skippedByBusiness := 0 // 统计业务感知过滤器跳过的数量
 	skippedByPattern := 0 // 统计URL模式去重跳过的数量
 	skippedByResourceType := 0 // 🆕 统计资源分类跳过的数量（静态资源/域外）
+	skippedByLoginWall := 0 // 🆕 v3.2 统计登录墙跳过的数量
 	
 	for link := range allLinks {
+		// 🆕 v3.2: 登录墙检测 - 跳过重复的登录页面变体
+		if s.loginWallDetector != nil {
+			shouldSkip, reason := s.loginWallDetector.ShouldSkipURL(link)
+			if shouldSkip {
+				skippedByLoginWall++
+				if skippedByLoginWall <= 3 {
+					s.logger.Debug("登录墙过滤",
+						"url", link,
+						"reason", reason)
+				}
+				continue
+			}
+		}
+		
 		// 🆕 v3.1: 使用exclude_extensions判断是否需要请求
 		// JS/CSS文件始终请求，其他被排除的扩展名只记录不请求
 		if s.scopeController != nil {
@@ -1338,6 +1468,11 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 	// 🆕 v3.1: 打印扩展名过滤统计
 	if skippedByResourceType > 0 {
 		fmt.Printf("  [扩展名过滤] 本层跳过 %d 个静态资源URL（已记录不请求，JS/CSS除外）\n", skippedByResourceType)
+	}
+	
+	// 🆕 v3.2: 打印登录墙过滤统计
+	if skippedByLoginWall > 0 {
+		fmt.Printf("  [登录墙过滤] 本层跳过 %d 个重复的登录页面变体\n", skippedByLoginWall)
 	}
 
 	// 优先级排序（🆕 传入实际深度，用于精确优先级计算）
@@ -1639,10 +1774,38 @@ func (s *Spider) prioritizeURLsWithPreciseCalculation(urls []string, depth int) 
 	return result
 }
 
+// isRelativeURL 检查是否为相对URL（用于CDN JS中的URL拼接）
+func isRelativeURL(urlStr string) bool {
+	// 完整URL（http://或https://）不是相对URL
+	if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
+		return false
+	}
+	
+	// 协议相对URL（//example.com）不是相对URL
+	if strings.HasPrefix(urlStr, "//") {
+		return false
+	}
+	
+	// 以下情况视为相对URL：
+	// - 以/开头（绝对路径）: /api/user
+	// - 以./开头（相对路径）: ./assets/app.js
+	// - 以../开头（上级路径）: ../config.json
+	// - 不含://但含路径分隔符: api/endpoint
+	return strings.HasPrefix(urlStr, "/") || 
+	       strings.HasPrefix(urlStr, "./") || 
+	       strings.HasPrefix(urlStr, "../") ||
+	       (strings.Contains(urlStr, "/") && !strings.Contains(urlStr, "://"))
+}
+
 // IsValidURL 检查URL是否为有效的HTTP/HTTPS链接
 func IsValidURL(url string) bool {
 	// 检查是否为空
 	if url == "" {
+		return false
+	}
+	
+	// 过滤明显无效的字符串（长度检查）
+	if len(url) < 2 || len(url) > 2048 {
 		return false
 	}
 
@@ -1652,17 +1815,65 @@ func IsValidURL(url string) bool {
 		strings.HasPrefix(url, "tel:") ||
 		strings.HasPrefix(url, "sms:") ||
 		strings.HasPrefix(url, "ftp:") ||
-		strings.HasPrefix(url, "file:") {
+		strings.HasPrefix(url, "file:") ||
+		strings.HasPrefix(url, "data:") {
 		return false
 	}
 
-	// 检查是否为相对链接（不包含协议）
-	if !strings.Contains(url, "://") && !strings.HasPrefix(url, "//") {
+	// 检查是否为HTTP/HTTPS协议（完整URL）
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return true
+	}
+	
+	// 检查是否为//开头的协议相对URL
+	if strings.HasPrefix(url, "//") {
 		return true
 	}
 
-	// 检查是否为HTTP/HTTPS协议
-	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+	// 对于相对URL，需要更严格的验证
+	if !strings.Contains(url, "://") {
+		// 排除明显不是URL的字符串
+		
+		// 1. 不包含空格（除非是编码后的%20）
+		if strings.Contains(url, " ") && !strings.Contains(url, "%20") {
+			return false
+		}
+		
+		// 2. 不能只是单个单词（没有路径分隔符）
+		// 允许：/path, /api/endpoint, ../relative, ./file
+		// 拒绝：word, emoji_name, keyword
+		if !strings.Contains(url, "/") && !strings.Contains(url, "?") && !strings.Contains(url, "#") {
+			// 单个单词，很可能是无效的
+			// 但要允许 index.html 这样的文件名
+			if !strings.Contains(url, ".") {
+				return false
+			}
+		}
+		
+		// 3. 排除常见的非URL模式
+		// - emoji名称（包含下划线但没有路径）
+		// - HTML属性（aria-*, data-*）
+		// - CSS类名
+		if !strings.HasPrefix(url, "/") && !strings.HasPrefix(url, ".") && !strings.HasPrefix(url, "?") {
+			// 检查是否看起来像emoji或属性名
+			if strings.Contains(url, "_") && !strings.Contains(url, "/") && !strings.Contains(url, "=") {
+				// 可能是 emoji_name 格式
+				return false
+			}
+			if strings.HasPrefix(url, "aria-") || strings.HasPrefix(url, "data-") {
+				return false
+			}
+		}
+		
+		// 4. 相对URL必须以 / . ? # 开头，或者看起来像文件路径
+		firstChar := url[0]
+		if firstChar != '/' && firstChar != '.' && firstChar != '?' && firstChar != '#' {
+			// 不以这些字符开头的，检查是否包含路径分隔符
+			if !strings.Contains(url, "/") {
+				return false
+			}
+		}
+		
 		return true
 	}
 
@@ -2109,6 +2320,25 @@ func (s *Spider) PrintStructureDeduplicationReport() {
 	}
 }
 
+// PrintLoginWallReport 打印登录墙检测报告
+func (s *Spider) PrintLoginWallReport() {
+	if s.loginWallDetector != nil {
+		s.loginWallDetector.PrintSummary()
+	}
+}
+
+// PrintRedirectReport 打印重定向检测报告
+func (s *Spider) PrintRedirectReport() {
+	if s.redirectManager != nil {
+		s.redirectManager.PrintReport()
+	}
+}
+
+// GetRedirectManager 获取重定向管理器
+func (s *Spider) GetRedirectManager() *RedirectManager {
+	return s.redirectManager
+}
+
 // CollectAllURLsForStructureDedup 收集所有URL并添加到结构化去重器
 // 该方法应在爬取完成后调用，用于分析和去重所有发现的URL
 func (s *Spider) CollectAllURLsForStructureDedup() {
@@ -2176,10 +2406,185 @@ func (s *Spider) filterBySeverity(findings []*SensitiveInfo) []*SensitiveInfo {
 	return filtered
 }
 
+// URLWithPriority URL优先级信息（用于混合策略）
+type URLWithPriority struct {
+	URL      string
+	Priority float64
+	Depth    int
+}
+
+// crawlWithHybridStrategy 🆕 v3.4 混合调度策略爬取（BFS框架+智能优先级排序）
+func (s *Spider) crawlWithHybridStrategy() {
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("【混合调度策略】BFS框架 + 智能优先级排序")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("✨ 结合BFS全面性和优先级智能性")
+	fmt.Println("✨ 自适应学习，越爬越聪明")
+	fmt.Println("")
+	
+	currentDepth := 1
+	totalCrawled := 0
+	
+	// 循环爬取每一层
+	for currentDepth < s.config.DepthSettings.MaxDepth {
+		currentDepth++
+		
+		fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Printf("【第 %d 层爬取】混合策略模式 | 最大深度: %d\n", currentDepth, s.config.DepthSettings.MaxDepth)
+		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		
+		// 1. 收集当前层的所有URL（BFS框架）
+		layerURLs := s.collectLinksForLayer(currentDepth)
+		
+		if len(layerURLs) == 0 {
+			fmt.Printf("第 %d 层没有新链接，爬取结束\n", currentDepth)
+			break
+		}
+		
+		fmt.Printf("收集到 %d 个候选URL\n", len(layerURLs))
+		
+		// 2. 计算每个URL的精确优先级
+		urlsWithPriority := s.calculateURLPriorities(layerURLs, currentDepth)
+		
+		// 3. 按优先级排序（高优先级在前）
+		sort.Slice(urlsWithPriority, func(i, j int) bool {
+			return urlsWithPriority[i].Priority > urlsWithPriority[j].Priority
+		})
+		
+		// 4. 应用层级限制（如果配置了）
+		maxURLs := s.config.SchedulingSettings.HybridConfig.MaxURLsPerLayer
+		originalCount := len(urlsWithPriority)
+		if maxURLs > 0 && len(urlsWithPriority) > maxURLs {
+			// 保留高优先级的URL
+			urlsWithPriority = urlsWithPriority[:maxURLs]
+			fmt.Printf("  [智能限制] 本层限制爬取前 %d 个高优先级URL（原始: %d个）\n", maxURLs, originalCount)
+		}
+		
+		// 5. 展示本层优先级TOP5
+		s.showLayerPriorityTop(urlsWithPriority, 5)
+		
+		// 6. 爬取（按优先级顺序）
+		results := s.crawlLayerWithPriority(urlsWithPriority, currentDepth)
+		
+		// 7. 自适应学习（根据爬取结果调整权重）
+		if s.adaptiveLearner != nil {
+			s.adaptiveLearner.LearnFromResults(results)
+			
+			// 检查是否需要调整权重
+			if shouldAdjust, reason := s.adaptiveLearner.ShouldAdjustWeights(); shouldAdjust {
+				fmt.Printf("\n🤖 [自适应学习] %s\n", reason)
+				if s.adaptiveLearner.AdjustWeights(s.priorityScheduler) {
+					fmt.Println("✅ 权重已优化，下一层将使用新权重")
+				}
+			}
+		}
+		
+		// 8. 合并结果
+		s.mutex.Lock()
+		s.results = append(s.results, results...)
+		s.mutex.Unlock()
+		
+		totalCrawled += len(results)
+		
+		fmt.Printf("\n第 %d 层完成！爬取 %d 个URL，累计 %d 个\n", 
+			currentDepth, len(results), totalCrawled)
+		
+		// 检查是否达到限制
+		if totalCrawled >= 500 {
+			fmt.Printf("已达到URL限制(500)，爬取结束\n")
+			break
+		}
+	}
+	
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("【混合策略爬取完成】\n")
+	fmt.Printf("总深度: %d 层 | 总URL: %d 个\n", currentDepth, totalCrawled)
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+}
+
+// calculateURLPriorities 计算URL列表的优先级
+func (s *Spider) calculateURLPriorities(urls []string, depth int) []*URLWithPriority {
+	result := make([]*URLWithPriority, 0, len(urls))
+	
+	// 获取权重配置
+	weights := s.config.SchedulingSettings.HybridConfig.PriorityWeights
+	
+	for _, urlStr := range urls {
+		// 基础优先级（来自PriorityScheduler）
+		basePriority := s.priorityScheduler.CalculatePriority(urlStr, depth)
+		
+		// 业务价值加成（来自BusinessAwareFilter）
+		businessBonus := 0.0
+		if s.businessFilter != nil && s.config.DeduplicationSettings.EnableBusinessAwareFilter {
+			_, _, businessScore := s.businessFilter.ShouldCrawlURL(urlStr)
+			// 将业务分数（0-100）转换为优先级加成
+			businessBonus = (businessScore / 100.0) * weights.BusinessValue * 10
+		}
+		
+		// 最终优先级 = 基础优先级 + 业务加成
+		finalPriority := basePriority + businessBonus
+		
+		result = append(result, &URLWithPriority{
+			URL:      urlStr,
+			Priority: finalPriority,
+			Depth:    depth,
+		})
+	}
+	
+	return result
+}
+
+// showLayerPriorityTop 展示本层优先级TOP N
+func (s *Spider) showLayerPriorityTop(urls []*URLWithPriority, topN int) {
+	if len(urls) == 0 {
+		return
+	}
+	
+	fmt.Printf("\n  [优先级TOP%d] 本层最高价值URL:\n", topN)
+	
+	displayCount := topN
+	if len(urls) < topN {
+		displayCount = len(urls)
+	}
+	
+	for i := 0; i < displayCount; i++ {
+		item := urls[i]
+		fmt.Printf("    %d. [优先级: %.2f] %s\n", i+1, item.Priority, item.URL)
+	}
+	
+	if len(urls) > displayCount {
+		fmt.Printf("    ... 还有 %d 个URL按优先级排序\n", len(urls)-displayCount)
+	}
+	fmt.Println()
+}
+
+// crawlLayerWithPriority 按优先级顺序爬取一层的URL
+func (s *Spider) crawlLayerWithPriority(urlsWithPriority []*URLWithPriority, depth int) []*Result {
+	if len(urlsWithPriority) == 0 {
+		return []*Result{}
+	}
+	
+	// 提取URL列表
+	urls := make([]string, 0, len(urlsWithPriority))
+	for _, item := range urlsWithPriority {
+		urls = append(urls, item.URL)
+	}
+	
+	// 标记为已访问
+	s.mutex.Lock()
+	for _, url := range urls {
+		s.visitedURLs[url] = true
+	}
+	s.mutex.Unlock()
+	
+	// 创建工作池（复用现有的crawlLayer逻辑）
+	return s.crawlLayer(urls, depth)
+}
+
 // crawlWithPriorityQueue 🆕 使用优先级队列模式爬取（实验性）
 func (s *Spider) crawlWithPriorityQueue() {
 	fmt.Println("\n开始优先级队列模式爬取...")
-	fmt.Println("算法：BFS + 优先级调度（智能排序）")
+	fmt.Println("算法：纯优先级队列调度（实验性）")
 	
 	// 将所有已发现的URL添加到优先级队列
 	s.mutex.Lock()

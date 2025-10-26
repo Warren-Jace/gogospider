@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>敏感信息检测测试页面</title>
+</head>
+<body>
+    <h1>测试页面</h1>
+    
+    <!-- 这个页面包含各种敏感信息，用于测试检测功能 -->
+    
+    <script>
+    // AWS密钥测试（示例数据，非真实密钥）
+    var aws_access_key = "AKIA_EXAMPLE_KEY_12345678";
+    var aws_secret = "EXAMPLE_SECRET_KEY_abcdefghijklmnopqrstuvwxyz";
+    
+    // 数据库连接
+    var db_host = "192.168.1.100";
+    var db_password = "example_password_123";
+    
+    // API密钥（示例数据，非真实密钥）
+    var api_key = "sk_test_example_key_XXXXXXXXXXXX";
+    
+    // 邮箱和手机
+    var email = "test@example.com";
+    var phone = "13800138000";
+    
+    // 内网IP
+    var internal_ip = "10.0.0.1";
+    </script>
+    
+    <div>
+        <p>配置信息：</p>
+        <pre>
+mysql://root:password123@localhost:3306/database
+redis://default:redis_pass@127.0.0.1:6379
+        </pre>
+    </div>
+</body>
+</html>
+
