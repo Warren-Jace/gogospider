@@ -37,8 +37,13 @@ func NewHiddenPathDiscovery(baseURL, userAgent string) *HiddenPathDiscovery {
 func (hpd *HiddenPathDiscovery) DiscoverAllHiddenPaths() []string {
 	var wg sync.WaitGroup
 	
-	// 同时运行多个发现任务
-	wg.Add(6)
+	// 🆕 使用内置的200个常见路径（优先级最高）
+	wg.Add(7)
+	
+	go func() {
+		defer wg.Done()
+		hpd.discoverCommonBusinessPaths()
+	}()
 	
 	go func() {
 		defer wg.Done()
@@ -73,6 +78,29 @@ func (hpd *HiddenPathDiscovery) DiscoverAllHiddenPaths() []string {
 	wg.Wait()
 	
 	return hpd.GetResults()
+}
+
+// discoverCommonBusinessPaths 🆕 发现常见业务路径（使用内置的200个路径）
+func (hpd *HiddenPathDiscovery) discoverCommonBusinessPaths() {
+	fmt.Println("  [路径发现] 开始扫描200个常见业务路径...")
+	
+	foundCount := 0
+	totalCount := len(CommonPaths)
+	
+	// 使用内置的CommonPaths列表
+	for _, commonPath := range CommonPaths {
+		testURL := hpd.resolveURL(commonPath)
+		if hpd.checkPath(testURL) {
+			hpd.addResult(fmt.Sprintf("BUSINESS_PATH: %s", testURL))
+			foundCount++
+		}
+	}
+	
+	if foundCount > 0 {
+		fmt.Printf("  [路径发现] ✅ 发现 %d/%d 个常见业务路径\n", foundCount, totalCount)
+	} else {
+		fmt.Printf("  [路径发现] 扫描完成，未发现额外路径（%d个已测试）\n", totalCount)
+	}
 }
 
 // discoverFromRobotsTxt 从robots.txt发现路径

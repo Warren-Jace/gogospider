@@ -47,15 +47,15 @@ func NewParamHandler() *ParamHandler {
 func (p *ParamHandler) MergeParams(baseURL string, params []string) ([]string, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	
+
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 获取现有查询参数
 	queryParams := parsedURL.Query()
-	
+
 	// 将新参数添加到查询参数中
 	// 这里简化处理，实际应用中可能需要更复杂的逻辑
 	for i, param := range params {
@@ -64,14 +64,14 @@ func (p *ParamHandler) MergeParams(baseURL string, params []string) ([]string, e
 		if i >= 26 {
 			paramName = "param_" + string(rune(i%26+'a')) + string(rune(i/26+'a'))
 		}
-		
+
 		// 添加参数值
 		queryParams.Add(paramName, param)
 	}
-	
+
 	// 更新URL的查询参数
 	parsedURL.RawQuery = queryParams.Encode()
-	
+
 	// 返回处理后的URL
 	return []string{parsedURL.String()}, nil
 }
@@ -82,19 +82,19 @@ func (p *ParamHandler) NormalizeURL(targetURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	// 获取查询参数
 	queryParams := parsedURL.Query()
-	
+
 	// 移除常见的会话参数
 	sessionParams := []string{"jsessionid", "phpsessid", "asp.net_sessionid", "sid"}
 	for _, param := range sessionParams {
 		queryParams.Del(param)
 	}
-	
+
 	// 更新URL
 	parsedURL.RawQuery = queryParams.Encode()
-	
+
 	return parsedURL.String(), nil
 }
 
@@ -104,38 +104,38 @@ func (p *ParamHandler) CompareURLs(url1, url2 string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	
+
 	parsedURL2, err := url.Parse(url2)
 	if err != nil {
 		return false, err
 	}
-	
+
 	// 比较协议、主机和路径
 	if parsedURL1.Scheme != parsedURL2.Scheme ||
 		parsedURL1.Host != parsedURL2.Host ||
 		parsedURL1.Path != parsedURL2.Path {
 		return false, nil
 	}
-	
+
 	// 可以添加更复杂的比较逻辑
 	// 例如比较参数结构而不是具体值
-	
+
 	return true, nil
 }
 
 // ExtractPathPatterns 从URL列表中提取路径模式
 func (p *ParamHandler) ExtractPathPatterns(urls []string) []string {
 	patterns := make([]string, 0)
-	
+
 	// 统计路径段出现频率
 	pathSegments := make(map[string]int)
-	
+
 	for _, urlString := range urls {
 		parsedURL, err := url.Parse(urlString)
 		if err != nil {
 			continue
 		}
-		
+
 		// 分割路径
 		segments := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
 		for _, segment := range segments {
@@ -147,13 +147,13 @@ func (p *ParamHandler) ExtractPathPatterns(urls []string) []string {
 			}
 		}
 	}
-	
+
 	// 构建模式
 	// 这里简化实现，实际应用中可以使用更复杂的模式识别算法
 	for pattern := range pathSegments {
 		patterns = append(patterns, pattern)
 	}
-	
+
 	return patterns
 }
 
@@ -161,12 +161,12 @@ func (p *ParamHandler) ExtractPathPatterns(urls []string) []string {
 func (p *ParamHandler) ExtractParams(targetURL string) (map[string][]string, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	
+
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 返回查询参数
 	return parsedURL.Query(), nil
 }
@@ -180,28 +180,28 @@ func parseInt(s string) int {
 // GenerateParamVariations 生成参数变体
 func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 	variations := make([]string, 0)
-	
+
 	// 解析基础URL
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
 		return variations
 	}
-	
+
 	// 获取查询参数
 	params := parsedURL.Query()
-	
+
 	// 如果没有参数，直接返回原URL
 	if len(params) == 0 {
 		return []string{baseURL}
 	}
-	
+
 	// 生成不同的参数组合
 	// 1. 原始参数
 	variations = append(variations, baseURL)
-	
+
 	// 2. 添加常见参数变体
 	commonParams := []string{"id", "page", "category", "product", "user", "token"}
-	
+
 	for _, paramName := range commonParams {
 		// 检查是否已存在该参数
 		if _, exists := params[paramName]; !exists {
@@ -211,26 +211,27 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 				newParams[k] = v
 			}
 			newParams.Set(paramName, "1") // 添加默认值
-			
+
 			// 构造新URL
 			newURL := *parsedURL
 			newURL.RawQuery = newParams.Encode()
 			variations = append(variations, newURL.String())
-			
-			// 添加其他常见值的变体
-			commonValues := []string{"2", "admin", "test", "debug", "123"}
-			for _, value := range commonValues {
-				newParams.Set(paramName, value)
-				newURL.RawQuery = newParams.Encode()
-				variations = append(variations, newURL.String())
-			}
+
+			// 优化: 每个参数名只测试一个默认值，避免URL爆炸
+			// 如需测试多个值，请使用专门的Fuzzer工具
+			// commonValues := []string{"2", "admin", "test", "debug", "123"}
+			// for _, value := range commonValues {
+			// 	newParams.Set(paramName, value)
+			// 	newURL.RawQuery = newParams.Encode()
+			// 	variations = append(variations, newURL.String())
+			// }
 		}
 	}
-	
+
 	// === 移除：HPP (HTTP Parameter Pollution) 变体 ===
 	// HTTP参数污染测试属于攻击性测试，不适合纯爬虫工具
 	// 如需测试，请使用专业的安全测试工具
-	
+
 	// 4. 特定于目标站点的参数变体
 	// cart.php 相关参数
 	if strings.Contains(baseURL, "cart.php") {
@@ -247,14 +248,14 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 				} else if paramName == "addcart" {
 					newParams.Set(paramName, "1")
 				}
-				
+
 				newURL := *parsedURL
 				newURL.RawQuery = newParams.Encode()
 				variations = append(variations, newURL.String())
 			}
 		}
 	}
-	
+
 	// 5. showimage.php 相关参数
 	if strings.Contains(baseURL, "showimage.php") {
 		imageParams := []string{"file", "size"}
@@ -270,14 +271,14 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 				} else if paramName == "size" {
 					newParams.Set(paramName, "160")
 				}
-				
+
 				newURL := *parsedURL
 				newURL.RawQuery = newParams.Encode()
 				variations = append(variations, newURL.String())
 			}
 		}
 	}
-	
+
 	// 6. 移除部分参数的变体
 	// 只有当原始URL有多个参数时才生成
 	if len(params) > 1 {
@@ -285,7 +286,7 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 		for paramName := range params {
 			paramNames = append(paramNames, paramName)
 		}
-		
+
 		// 为每个参数生成一个移除了该参数的变体
 		for _, paramNameToRemove := range paramNames {
 			newParams := url.Values{}
@@ -294,13 +295,13 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 					newParams[k] = v
 				}
 			}
-			
+
 			newURL := *parsedURL
 			newURL.RawQuery = newParams.Encode()
 			variations = append(variations, newURL.String())
 		}
 	}
-	
+
 	// 去重
 	uniqueVariations := make([]string, 0)
 	seen := make(map[string]bool)
@@ -310,51 +311,51 @@ func (ph *ParamHandler) GenerateParamVariations(baseURL string) []string {
 			uniqueVariations = append(uniqueVariations, variation)
 		}
 	}
-	
+
 	return uniqueVariations
 }
 
 // DiscoverParametersFromMultipleSources 从多个来源发现参数
 func (ph *ParamHandler) DiscoverParametersFromMultipleSources(htmlContent, jsContent, headers string) []string {
 	allParams := make(map[string]bool)
-	
+
 	// 从HTML表单中发现参数
 	htmlParams := ph.extractParamsFromHTML(htmlContent)
 	for _, param := range htmlParams {
 		allParams[param] = true
 	}
-	
+
 	// 从JavaScript中发现参数
 	jsParams := ph.extractParamsFromJS(jsContent)
 	for _, param := range jsParams {
 		allParams[param] = true
 	}
-	
+
 	// 从HTTP响应头中发现参数
 	headerParams := ph.extractParamsFromHeaders(headers)
 	for _, param := range headerParams {
 		allParams[param] = true
 	}
-	
+
 	// 从HTML注释中发现参数
 	commentParams := ph.extractParamsFromComments(htmlContent)
 	for _, param := range commentParams {
 		allParams[param] = true
 	}
-	
+
 	// 转换为slice
 	result := make([]string, 0, len(allParams))
 	for param := range allParams {
 		result = append(result, param)
 	}
-	
+
 	return result
 }
 
 // extractParamsFromHTML 从HTML内容中提取参数
 func (ph *ParamHandler) extractParamsFromHTML(htmlContent string) []string {
 	params := make([]string, 0)
-	
+
 	// 匹配input, select, textarea的name属性
 	patterns := []string{
 		`<input[^>]+name\s*=\s*['"]([\w\[\]]+)['"][^>]*>`,
@@ -367,7 +368,7 @@ func (ph *ParamHandler) extractParamsFromHTML(htmlContent string) []string {
 		// URL中的参数引用
 		`[\?&]([\w\[\]]+)=`,
 	}
-	
+
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
 		matches := re.FindAllStringSubmatch(htmlContent, -1)
@@ -377,14 +378,14 @@ func (ph *ParamHandler) extractParamsFromHTML(htmlContent string) []string {
 			}
 		}
 	}
-	
+
 	return params
 }
 
 // extractParamsFromJS 从JavaScript内容中提取参数
 func (ph *ParamHandler) extractParamsFromJS(jsContent string) []string {
 	params := make([]string, 0)
-	
+
 	patterns := []string{
 		// 对象属性
 		`['"]([^'"]+)['"]\s*:\s*['"][^'"]*['"]`,
@@ -399,7 +400,7 @@ func (ph *ParamHandler) extractParamsFromJS(jsContent string) []string {
 		// FormData参数
 		`(?:append|set)\s*\(\s*['"]([^'"]+)['"]`,
 	}
-	
+
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
 		matches := re.FindAllStringSubmatch(jsContent, -1)
@@ -412,14 +413,14 @@ func (ph *ParamHandler) extractParamsFromJS(jsContent string) []string {
 			}
 		}
 	}
-	
+
 	return params
 }
 
 // extractParamsFromHeaders 从HTTP响应头中提取参数
 func (ph *ParamHandler) extractParamsFromHeaders(headers string) []string {
 	params := make([]string, 0)
-	
+
 	patterns := []string{
 		// Set-Cookie中的参数
 		`Set-Cookie:\s*([^=]+)=`,
@@ -428,7 +429,7 @@ func (ph *ParamHandler) extractParamsFromHeaders(headers string) []string {
 		// Location重定向中的参数
 		`Location:.*[\?&]([\w\[\]]+)=`,
 	}
-	
+
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
 		matches := re.FindAllStringSubmatch(headers, -1)
@@ -438,19 +439,19 @@ func (ph *ParamHandler) extractParamsFromHeaders(headers string) []string {
 			}
 		}
 	}
-	
+
 	return params
 }
 
 // extractParamsFromComments 从HTML注释中提取参数
 func (ph *ParamHandler) extractParamsFromComments(htmlContent string) []string {
 	params := make([]string, 0)
-	
+
 	// 匹配HTML注释
 	commentPattern := `<!--(.*?)-->`
 	re := regexp.MustCompile(commentPattern)
 	matches := re.FindAllStringSubmatch(htmlContent, -1)
-	
+
 	for _, match := range matches {
 		if len(match) > 1 {
 			comment := match[1]
@@ -462,7 +463,7 @@ func (ph *ParamHandler) extractParamsFromComments(htmlContent string) []string {
 				`parameter\s*:\s*['"]([^'"]+)['"]`,
 				`field\s*:\s*['"]([^'"]+)['"]`,
 			}
-			
+
 			for _, pattern := range paramPatterns {
 				paramRe := regexp.MustCompile(pattern)
 				paramMatches := paramRe.FindAllStringSubmatch(comment, -1)
@@ -474,35 +475,35 @@ func (ph *ParamHandler) extractParamsFromComments(htmlContent string) []string {
 			}
 		}
 	}
-	
+
 	return params
 }
 
 // AnalyzeParameterSecurity 分析参数的安全风险
 func (ph *ParamHandler) AnalyzeParameterSecurity(paramName string) (string, int) {
 	paramLower := strings.ToLower(paramName)
-	
+
 	// 检查是否为危险参数
 	for _, dangerous := range ph.dangerousParams {
 		if strings.Contains(paramLower, dangerous) {
 			return fmt.Sprintf("DANGEROUS: 可能存在%s相关漏洞", dangerous), 3
 		}
 	}
-	
+
 	// 检查是否为文件包含参数
 	for _, fileParam := range ph.fileInclusionParams {
 		if strings.Contains(paramLower, fileParam) {
 			return "FILE_INCLUSION: 可能存在文件包含漏洞", 3
 		}
 	}
-	
+
 	// 检查是否为安全相关参数
 	for _, secParam := range ph.securityParams {
 		if strings.Contains(paramLower, secParam) {
 			return fmt.Sprintf("SECURITY: %s相关参数，需要重点测试", secParam), 2
 		}
 	}
-	
+
 	// 检查SQL注入风险参数
 	sqlParams := []string{"id", "user", "product", "category", "search", "query", "name", "email"}
 	for _, sqlParam := range sqlParams {
@@ -510,7 +511,7 @@ func (ph *ParamHandler) AnalyzeParameterSecurity(paramName string) (string, int)
 			return "SQL_INJECTION: 可能存在SQL注入漏洞", 2
 		}
 	}
-	
+
 	// 检查XSS风险参数
 	xssParams := []string{"message", "comment", "content", "text", "description", "title", "subject"}
 	for _, xssParam := range xssParams {
@@ -518,7 +519,7 @@ func (ph *ParamHandler) AnalyzeParameterSecurity(paramName string) (string, int)
 			return "XSS: 可能存在跨站脚本漏洞", 2
 		}
 	}
-	
+
 	return "INFO: 常规参数", 1
 }
 
@@ -538,68 +539,68 @@ func (ph *ParamHandler) GenerateSecurityTestVariations(baseURL string) []string 
 // GenerateParameterFuzzList 生成参数模糊测试列表
 func (ph *ParamHandler) GenerateParameterFuzzList(targetURL string) []string {
 	fuzzList := make([]string, 0)
-	
+
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		return fuzzList
 	}
-	
+
 	// 基础URL（无参数）
 	baseURL := parsedURL.Scheme + "://" + parsedURL.Host + parsedURL.Path
-	
+
 	// 常见参数名列表
 	commonParams := []string{
 		// 通用参数
 		"id", "page", "limit", "offset", "sort", "order", "search", "q", "query",
 		"filter", "category", "type", "status", "action", "method", "format",
-		
+
 		// 用户相关
 		"user", "username", "userid", "uid", "email", "password", "pass", "pwd",
 		"token", "auth", "session", "key", "api_key", "access_token",
-		
+
 		// 文件相关
 		"file", "filename", "path", "dir", "folder", "upload", "download",
 		"image", "img", "pic", "photo", "document", "doc", "pdf",
-		
+
 		// 数据库相关
 		"table", "column", "field", "record", "row", "data", "value",
 		"insert", "update", "delete", "select", "where", "join",
-		
+
 		// 系统相关
 		"cmd", "command", "exec", "system", "shell", "script", "function",
 		"class", "method", "module", "plugin", "extension", "callback",
-		
+
 		// 调试相关
 		"debug", "test", "dev", "development", "staging", "prod", "production",
 		"admin", "administrator", "root", "config", "settings", "options",
-		
+
 		// 重定向相关
 		"redirect", "return", "next", "continue", "url", "link", "ref", "referer",
 		"target", "destination", "forward", "back", "home", "exit",
-		
+
 		// 特殊功能
 		"preview", "view", "show", "display", "print", "export", "import",
 		"backup", "restore", "reset", "clear", "clean", "flush", "cache",
 	}
-	
+
 	// 为每个参数生成测试URL
 	for _, param := range commonParams {
 		// 基本测试值
 		testValues := []string{"1", "test", "admin", "../", "null", "true", "false"}
-		
+
 		for _, value := range testValues {
 			testURL := fmt.Sprintf("%s?%s=%s", baseURL, param, value)
 			fuzzList = append(fuzzList, testURL)
 		}
-		
+
 		// 空值测试
 		fuzzList = append(fuzzList, fmt.Sprintf("%s?%s=", baseURL, param))
-		
+
 		// 数组参数测试
 		fuzzList = append(fuzzList, fmt.Sprintf("%s?%s[]=1", baseURL, param))
 		fuzzList = append(fuzzList, fmt.Sprintf("%s?%s[0]=1", baseURL, param))
 	}
-	
+
 	return fuzzList
 }
 
@@ -618,7 +619,7 @@ func isJavaScriptKeyword(word string) bool {
 		"length": true, "prototype": true, "constructor": true, "toString": true,
 		"valueOf": true, "hasOwnProperty": true, "isPrototypeOf": true,
 	}
-	
+
 	_, isKeyword := keywords[strings.ToLower(word)]
 	return isKeyword
 }
@@ -627,21 +628,21 @@ func isJavaScriptKeyword(word string) bool {
 // ⚠️ 已修改：移除了所有攻击性payload，只保留正常的参数变体
 func (ph *ParamHandler) GeneratePOSTVariations(postReq POSTRequest) []POSTRequest {
 	variations := make([]POSTRequest, 0)
-	
+
 	// 添加原始请求
 	variations = append(variations, postReq)
-	
+
 	// 如果没有参数，返回空变体，让调用者决定是否进行爆破
 	if len(postReq.Parameters) == 0 {
 		return variations
 	}
-	
+
 	// === 移除：SQL注入、XSS、命令注入等攻击性payload ===
 	// 作为纯爬虫工具，不应包含攻击性测试
 	// 如需安全测试，请导出URL和表单后使用专业工具
-	
+
 	// === 保留：正常的参数变体（用于爬虫测试） ===
-	
+
 	// 1. 参数值变化（使用正常值）
 	normalValues := []string{"1", "2", "test", "admin", "true", "false"}
 	for paramName := range postReq.Parameters {
@@ -652,7 +653,7 @@ func (ph *ParamHandler) GeneratePOSTVariations(postReq POSTRequest) []POSTReques
 			variations = append(variations, newReq)
 		}
 	}
-	
+
 	// 2. 空值测试（正常的边界测试）
 	for paramName := range postReq.Parameters {
 		newReq := ph.clonePOSTRequest(postReq)
@@ -660,7 +661,7 @@ func (ph *ParamHandler) GeneratePOSTVariations(postReq POSTRequest) []POSTReques
 		newReq.Body = ph.buildPOSTBody(newReq.Parameters)
 		variations = append(variations, newReq)
 	}
-	
+
 	// 3. 数组参数测试（正常的格式测试）
 	for paramName, paramValue := range postReq.Parameters {
 		newReq := ph.clonePOSTRequest(postReq)
@@ -669,27 +670,27 @@ func (ph *ParamHandler) GeneratePOSTVariations(postReq POSTRequest) []POSTReques
 		newReq.Body = ph.buildPOSTBody(newReq.Parameters)
 		variations = append(variations, newReq)
 	}
-	
+
 	return variations
 }
 
 // ExtractPOSTParameters 从POSTRequest中提取参数信息（用于分析）
 func (ph *ParamHandler) ExtractPOSTParameters(postReq POSTRequest) []map[string]interface{} {
 	params := make([]map[string]interface{}, 0)
-	
+
 	for name, value := range postReq.Parameters {
 		paramInfo := map[string]interface{}{
-			"name":          name,
-			"value":         value,
-			"value_length":  len(value),
-			"from_form":     postReq.FromForm,
+			"name":         name,
+			"value":        value,
+			"value_length": len(value),
+			"from_form":    postReq.FromForm,
 		}
-		
+
 		// 安全分析
 		risk, level := ph.AnalyzeParameterSecurity(name)
 		paramInfo["security_risk"] = risk
 		paramInfo["risk_level"] = level
-		
+
 		// 值类型分析
 		if _, err := strconv.Atoi(value); err == nil {
 			paramInfo["value_type"] = "number"
@@ -700,10 +701,10 @@ func (ph *ParamHandler) ExtractPOSTParameters(postReq POSTRequest) []map[string]
 		} else {
 			paramInfo["value_type"] = "text"
 		}
-		
+
 		params = append(params, paramInfo)
 	}
-	
+
 	return params
 }
 
@@ -718,12 +719,12 @@ func (ph *ParamHandler) clonePOSTRequest(req POSTRequest) POSTRequest {
 		FromForm:    req.FromForm,
 		FormAction:  req.FormAction,
 	}
-	
+
 	// 深拷贝参数
 	for k, v := range req.Parameters {
 		newReq.Parameters[k] = v
 	}
-	
+
 	return newReq
 }
 
@@ -739,7 +740,7 @@ func (ph *ParamHandler) buildPOSTBody(parameters map[string]string) string {
 // GeneratePOSTParameterFuzzList 生成POST参数爆破列表（用于无参数表单）
 func (ph *ParamHandler) GeneratePOSTParameterFuzzList(baseURL string) []POSTRequest {
 	fuzzList := make([]POSTRequest, 0)
-	
+
 	// 常见POST参数组合（按场景分类）
 	postParamCombinations := []map[string]string{
 		// === 认证/登录场景 ===
@@ -750,48 +751,48 @@ func (ph *ParamHandler) GeneratePOSTParameterFuzzList(baseURL string) []POSTRequ
 		{"login": "admin", "pwd": "admin123"},
 		{"account": "admin", "password": "admin123"},
 		{"uname": "admin", "upass": "admin123"},
-		
+
 		// === 用户信息场景 ===
 		{"username": "testuser", "email": "test@example.com", "password": "Test@123"},
 		{"name": "Test User", "email": "test@example.com", "phone": "13800138000"},
 		{"firstname": "Test", "lastname": "User", "email": "test@example.com"},
-		
+
 		// === 搜索场景 ===
 		{"search": "test", "q": "admin"},
 		{"query": "test", "type": "all"},
 		{"keyword": "admin", "category": "1"},
 		{"s": "test"},
-		
+
 		// === 数据操作场景 ===
 		{"id": "1", "action": "update"},
 		{"id": "1", "action": "delete"},
 		{"userid": "1", "operation": "edit"},
 		{"item_id": "1", "quantity": "1"},
-		
+
 		// === 文件操作场景 ===
 		{"file": "test.txt", "action": "read"},
 		{"filename": "../../../etc/passwd"},
 		{"path": "/tmp/test"},
 		{"upload": "test.php"},
-		
+
 		// === 评论/留言场景 ===
 		{"comment": "test comment", "author": "Test User"},
 		{"message": "test message", "name": "Test"},
 		{"content": "test content", "title": "Test Title"},
 		{"text": "test text", "user": "admin"},
-		
+
 		// === API测试场景 ===
 		{"api_key": "test123", "action": "list"},
 		{"token": "abc123def456", "method": "get"},
 		{"auth": "Bearer test123", "resource": "users"},
 		{"key": "test", "secret": "secret123"},
-		
+
 		// === 系统/调试场景 ===
 		{"debug": "1", "show_errors": "1"},
 		{"test": "1", "verbose": "1"},
 		{"dev": "1", "trace": "1"},
 		{"admin": "1", "mode": "debug"},
-		
+
 		// === 单参数测试 ===
 		{"id": "1"},
 		{"page": "1"},
@@ -807,7 +808,7 @@ func (ph *ParamHandler) GeneratePOSTParameterFuzzList(baseURL string) []POSTRequ
 		{"redirect": "/admin"},
 		{"url": "http://evil.com"},
 		{"callback": "alert(1)"},
-		
+
 		// === 常见字段名组合 ===
 		{"username": "admin"},
 		{"password": "admin123"},
@@ -821,11 +822,11 @@ func (ph *ParamHandler) GeneratePOSTParameterFuzzList(baseURL string) []POSTRequ
 		{"message": "Test Message"},
 		{"comment": "Test Comment"},
 	}
-	
+
 	// 为每个参数组合生成POST请求
 	for _, params := range postParamCombinations {
 		body := ph.buildPOSTBody(params)
-		
+
 		postReq := POSTRequest{
 			URL:         baseURL,
 			Method:      "POST",
@@ -835,9 +836,9 @@ func (ph *ParamHandler) GeneratePOSTParameterFuzzList(baseURL string) []POSTRequ
 			FromForm:    false,
 			FormAction:  baseURL,
 		}
-		
+
 		fuzzList = append(fuzzList, postReq)
 	}
-	
+
 	return fuzzList
 }

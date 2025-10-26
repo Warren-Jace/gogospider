@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/base64"
 	"regexp"
 	"strings"
 )
@@ -522,5 +523,88 @@ func (j *JSAnalyzer) EnhancedAnalyze(jsContent string) map[string][]string {
 	// 路由配置
 	result["router_urls"] = j.AnalyzeRouterConfig(jsContent)
 	
+	// 🆕 Base64解码URL
+	result["base64_urls"] = j.ExtractBase64URLs(jsContent)
+	
 	return result
+}
+
+// ExtractBase64URLs 从JavaScript中提取Base64编码的URL（新功能）
+func (j *JSAnalyzer) ExtractBase64URLs(jsContent string) []string {
+	urls := make([]string, 0)
+	seen := make(map[string]bool)
+	
+	// 匹配atob()函数调用
+	patterns := []string{
+		// atob('base64string')
+		`atob\s*\(\s*['"]([A-Za-z0-9+/=]{16,})['"]`,
+		
+		// atob("base64string")
+		`atob\s*\(\s*["']([A-Za-z0-9+/=]{16,})["']`,
+		
+		// window.atob()
+		`window\.atob\s*\(\s*['"]([A-Za-z0-9+/=]{16,})['"]`,
+		
+		// 变量赋值: var decoded = atob(...)
+		`=\s*atob\s*\(\s*['"]([A-Za-z0-9+/=]{16,})['"]`,
+	}
+	
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindAllStringSubmatch(jsContent, -1)
+		
+		for _, match := range matches {
+			if len(match) >= 2 {
+				base64Str := match[1]
+				
+				// 尝试解码
+				decoded, err := base64.StdEncoding.DecodeString(base64Str)
+				if err != nil {
+					// 尝试URL安全的Base64解码
+					decoded, err = base64.URLEncoding.DecodeString(base64Str)
+					if err != nil {
+						// 尝试不带padding的解码
+						decoded, err = base64.RawStdEncoding.DecodeString(base64Str)
+						if err != nil {
+							continue
+						}
+					}
+				}
+				
+				decodedStr := string(decoded)
+				
+				// 检查解码后的字符串是否为URL
+				if j.looksLikeURL(decodedStr) {
+					if !seen[decodedStr] {
+						seen[decodedStr] = true
+						urls = append(urls, decodedStr)
+					}
+				}
+			}
+		}
+	}
+	
+	return urls
+}
+
+// looksLikeURL 判断字符串是否像URL
+func (j *JSAnalyzer) looksLikeURL(s string) bool {
+	// 检查是否包含URL特征
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+		return true
+	}
+	
+	if strings.HasPrefix(s, "//") {
+		return true
+	}
+	
+	// 检查是否为路径（以/开头）
+	if strings.HasPrefix(s, "/") && len(s) > 1 {
+		// 确保不是乱码
+		if strings.Count(s, "/") >= 1 && !strings.Contains(s, "\x00") {
+			return true
+		}
+	}
+	
+	return false
 }

@@ -21,24 +21,29 @@ type WorkerPool struct {
 	resultChan  chan *Result
 	errorChan   chan error
 	wg          sync.WaitGroup
+	collectWg   sync.WaitGroup // 新增：用于等待collectResults goroutine
 	ctx         context.Context
 	cancel      context.CancelFunc
-	
+
 	// 统计信息
 	totalTasks     int
 	completedTasks int
 	failedTasks    int
 	mutex          sync.Mutex
-	
+
 	// 速率限制
 	rateLimiter *time.Ticker
 	maxQPS      int // 每秒最大请求数
+
+	// 结果收集
+	results      []*Result  // 新增：内部存储结果
+	resultsMutex sync.Mutex // 新增：结果锁
 }
 
 // NewWorkerPool 创建工作池
 func NewWorkerPool(workerCount int, maxQPS int) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &WorkerPool{
 		workerCount: workerCount,
 		taskQueue:   make(chan Task, workerCount*10), // 缓冲队列
@@ -48,6 +53,7 @@ func NewWorkerPool(workerCount int, maxQPS int) *WorkerPool {
 		cancel:      cancel,
 		maxQPS:      maxQPS,
 		rateLimiter: time.NewTicker(time.Second / time.Duration(maxQPS)),
+		results:     make([]*Result, 0), // 初始化结果切片
 	}
 }
 
@@ -58,31 +64,32 @@ func (wp *WorkerPool) Start(workerFunc func(task Task) (*Result, error)) {
 		wp.wg.Add(1)
 		go wp.worker(i, workerFunc)
 	}
-	
-	// 启动结果收集协程
+
+	// 启动结果收集协程（使用collectWg等待）
+	wp.collectWg.Add(1)
 	go wp.collectResults()
 }
 
 // worker 工作协程
 func (wp *WorkerPool) worker(id int, workerFunc func(task Task) (*Result, error)) {
 	defer wp.wg.Done()
-	
+
 	for {
 		select {
 		case <-wp.ctx.Done():
 			return
-			
+
 		case task, ok := <-wp.taskQueue:
 			if !ok {
 				return
 			}
-			
+
 			// 速率限制
 			<-wp.rateLimiter.C
-			
+
 			// 执行任务
 			result, err := workerFunc(task)
-			
+
 			wp.mutex.Lock()
 			wp.completedTasks++
 			if err != nil {
@@ -98,15 +105,33 @@ func (wp *WorkerPool) worker(id int, workerFunc func(task Task) (*Result, error)
 
 // collectResults 收集结果
 func (wp *WorkerPool) collectResults() {
+	defer wp.collectWg.Done()
+
 	for {
 		select {
 		case <-wp.ctx.Done():
+			// context取消，停止收集
 			return
-		case err := <-wp.errorChan:
-			// 可以在这里处理错误日志
-			fmt.Printf("错误: %v\n", err)
-		case <-time.After(100 * time.Millisecond):
-			// 避免阻塞
+
+		case result, ok := <-wp.resultChan:
+			if !ok {
+				// resultChan已关闭，停止收集
+				return
+			}
+			// 存储结果
+			wp.resultsMutex.Lock()
+			wp.results = append(wp.results, result)
+			wp.resultsMutex.Unlock()
+
+		case err, ok := <-wp.errorChan:
+			if !ok {
+				// errorChan已关闭
+				return
+			}
+			// 处理错误（只记录，不中断）
+			if err != nil {
+				fmt.Printf("  工作池错误: %v\n", err)
+			}
 		}
 	}
 }
@@ -128,26 +153,42 @@ func (wp *WorkerPool) Submit(task Task) error {
 
 // Wait 等待所有任务完成
 func (wp *WorkerPool) Wait() {
-	// 关闭任务队列
+	// 关闭任务队列（不再接受新任务）
 	close(wp.taskQueue)
-	
+
 	// 等待所有worker完成
 	wp.wg.Wait()
-}
 
-// Stop 停止工作池
-func (wp *WorkerPool) Stop() {
-	wp.cancel()
-	wp.rateLimiter.Stop()
+	// worker完成后，关闭结果和错误channel
+	// 这样collectResults能够正常退出
 	close(wp.resultChan)
 	close(wp.errorChan)
+
+	// 等待结果收集完成
+	wp.collectWg.Wait()
+}
+
+// Stop 停止工作池（紧急停止，不等待任务完成）
+func (wp *WorkerPool) Stop() {
+	// 取消context，通知所有goroutine停止
+	wp.cancel()
+
+	// 停止速率限制器
+	if wp.rateLimiter != nil {
+		wp.rateLimiter.Stop()
+	}
+
+	// 注意：channel已经在Wait()中关闭了
+	// 这里只需要等待goroutine退出
+	wp.wg.Wait()
+	wp.collectWg.Wait()
 }
 
 // GetStats 获取统计信息
 func (wp *WorkerPool) GetStats() map[string]int {
 	wp.mutex.Lock()
 	defer wp.mutex.Unlock()
-	
+
 	return map[string]int{
 		"total":     wp.totalTasks,
 		"completed": wp.completedTasks,
@@ -160,28 +201,21 @@ func (wp *WorkerPool) GetStats() map[string]int {
 func (wp *WorkerPool) GetProgress() float64 {
 	wp.mutex.Lock()
 	defer wp.mutex.Unlock()
-	
+
 	if wp.totalTasks == 0 {
 		return 0
 	}
-	
+
 	return float64(wp.completedTasks) / float64(wp.totalTasks) * 100
 }
 
-// GetResults 获取所有结果（非阻塞）
+// GetResults 获取所有结果（在Wait()之后调用）
 func (wp *WorkerPool) GetResults() []*Result {
-	results := make([]*Result, 0)
-	
-	for {
-		select {
-		case result, ok := <-wp.resultChan:
-			if !ok {
-				return results
-			}
-			results = append(results, result)
-		case <-time.After(100 * time.Millisecond):
-			return results
-		}
-	}
-}
+	wp.resultsMutex.Lock()
+	defer wp.resultsMutex.Unlock()
 
+	// 返回结果副本
+	results := make([]*Result, len(wp.results))
+	copy(results, wp.results)
+	return results
+}

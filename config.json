@@ -1,20 +1,47 @@
 {
-  "TargetURL": "http://testphp.vulnweb.com/",
-  "DepthSettings": {
-    "MaxDepth": 5,
-    "SchedulingAlgorithm": "BFS",
-    "DeepCrawling": true
+  "target_url": "http://testphp.vulnweb.com",
+  
+  "depth_settings": {
+    "max_depth": 5,
+    "deep_crawling": true,
+    "scheduling_algorithm": "BFS"
   },
-  "StrategySettings": {
-    "EnableStaticCrawler": true,
-    "EnableDynamicCrawler": true,
-    "EnableJSAnalysis": true,
-    "EnableAPIInference": true,
-    "DomainScope": "testphp.vulnweb.com"
+  
+  "strategy_settings": {
+    "enable_static_crawler": true,
+    "enable_dynamic_crawler": true,
+    "enable_js_analysis": true,
+    "enable_api_inference": true,
+    "enable_param_fuzzing": true,
+    "param_fuzz_limit": 100,
+    "enable_post_param_fuzzing": true,
+    "post_param_fuzz_limit": 50,
+    "domain_scope": ""
   },
-  "DeduplicationSettings": {
-    "EnableURLPatternRecognition": true,
-    "EnableDOMDeduplication": true,
-    "SimilarityThreshold": 0.85
+  
+  "anti_detection_settings": {
+    "request_delay": "500ms",
+    "user_agents": [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ],
+    "proxies": [],
+    "enable_form_auto_fill": true
+  },
+  
+  "deduplication_settings": {
+    "similarity_threshold": 0.85,
+    "enable_dom_deduplication": true,
+    "enable_url_pattern_recognition": true,
+    "enable_smart_param_dedup": true,
+    "max_param_value_variants_per_group": 3
+  },
+  
+  "log_settings": {
+    "level": "INFO",
+    "output_file": "",
+    "format": "json",
+    "show_metrics": false
   }
 }

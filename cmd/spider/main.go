@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -113,10 +114,11 @@ func main() {
 	if userAgent != "" {
 		cfg.AntiDetectionSettings.UserAgents = []string{userAgent}
 	}
-	if enableFuzzing {
-		cfg.StrategySettings.EnableParamFuzzing = true
-		cfg.StrategySettings.EnablePOSTParamFuzzing = true
-	}
+	// 参数爆破功能已移除
+	// if enableFuzzing {
+	// 	cfg.StrategySettings.EnableParamFuzzing = true
+	// 	cfg.StrategySettings.EnablePOSTParamFuzzing = true
+	// }
 	
 	// v2.6: 配置日志设置
 	if logLevel != "info" {
@@ -154,7 +156,7 @@ func main() {
 	fmt.Printf("[*] 最大深度: %d\n", cfg.DepthSettings.MaxDepth)
 	fmt.Printf("[*] 静态爬虫: %v\n", cfg.StrategySettings.EnableStaticCrawler)
 	fmt.Printf("[*] 动态爬虫: %v\n", cfg.StrategySettings.EnableDynamicCrawler)
-	fmt.Printf("[*] 参数爆破: %v\n", cfg.StrategySettings.EnableParamFuzzing)
+	fmt.Printf("[*] 纯爬虫模式: 专注URL发现（已禁用参数爆破）\n")
 	fmt.Println()
 
 	startTime := time.Now()
@@ -177,14 +179,35 @@ func main() {
 		log.Printf("保存结果失败: %v", err)
 	}
 
-	// 保存URL列表
+	// 保存URL列表（旧版，为了兼容性保留）
 	if err := saveURLs(results, baseFilename+"_urls.txt"); err != nil {
 		log.Printf("保存URL列表失败: %v", err)
 	}
+	
+	// 保存所有类型的URL到不同文件（新增：增强版）
+	if err := saveAllURLs(results, baseFilename); err != nil {
+		log.Printf("保存分类URL失败: %v", err)
+	}
 
+	// 🆕 v2.8: 保存去重后的URL（忽略参数值）
+	uniqueURLFile := baseFilename + "_unique_urls.txt"
+	if err := spider.SaveUniqueURLsToFile(uniqueURLFile); err != nil {
+		log.Printf("保存去重URL失败: %v", err)
+	}
+	
 	// 打印统计信息
 	if !simpleMode {
 		printStats(results, elapsed)
+		
+		// v2.9: 打印URL模式去重报告
+		spider.PrintURLPatternDedupReport()
+		
+		// v2.7: 打印业务感知过滤器报告
+		spider.PrintBusinessFilterReport()
+		
+		// 🆕 v2.8: 打印URL去重报告
+		spider.PrintURLDeduplicationReport()
+		
 		fmt.Printf("\n[+] 结果已保存到当前目录\n")
 	}
 	
@@ -204,7 +227,7 @@ func printBanner() {
 ║   ╚══════╝╚═╝     ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝               ║
 ║                                                               ║
 ║            Spider Ultimate - 智能Web爬虫系统                 ║
-║                     Version 2.5                               ║
+║              Version 2.10 - Pure Crawler                      ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 `
@@ -278,13 +301,204 @@ func saveURLs(results []*core.Result, filename string) error {
 	defer file.Close()
 
 	urlSet := make(map[string]bool)
+	
+	// 收集所有URL：爬取的页面URL + 发现的链接
 	for _, result := range results {
+		// 添加页面URL
 		if !urlSet[result.URL] {
 			file.WriteString(result.URL + "\n")
 			urlSet[result.URL] = true
 		}
+		
+		// 添加发现的所有链接
+		for _, link := range result.Links {
+			if !urlSet[link] {
+				file.WriteString(link + "\n")
+				urlSet[link] = true
+			}
+		}
 	}
 
+	return nil
+}
+
+// saveAllURLs 保存所有类型的URL到不同文件（新增：增强版URL保存）
+func saveAllURLs(results []*core.Result, baseFilename string) error {
+	// 1. 保存所有URL（最完整）
+	allURLs := make(map[string]bool)
+	paramURLs := make(map[string]bool)
+	apiURLs := make(map[string]bool)
+	formURLs := make(map[string]bool)
+	
+	for _, result := range results {
+		// 收集爬取的页面URL
+		allURLs[result.URL] = true
+		
+		if strings.Contains(result.URL, "?") {
+			paramURLs[result.URL] = true
+		}
+		
+		// 收集发现的链接
+		for _, link := range result.Links {
+			allURLs[link] = true
+			if strings.Contains(link, "?") {
+				paramURLs[link] = true
+			}
+		}
+		
+		// 收集API
+		for _, api := range result.APIs {
+			allURLs[api] = true
+			apiURLs[api] = true
+		}
+		
+		// 收集表单URL
+		for _, form := range result.Forms {
+			if form.Action != "" {
+				allURLs[form.Action] = true
+				formURLs[form.Action] = true
+			}
+		}
+	}
+	
+	// 保存所有URL到主文件
+	if err := writeURLsToFile(allURLs, baseFilename+"_all_urls.txt"); err != nil {
+		return fmt.Errorf("保存全部URL失败: %v", err)
+	}
+	
+	// 保存带参数的URL（方便参数Fuzz）
+	if len(paramURLs) > 0 {
+		if err := writeURLsToFile(paramURLs, baseFilename+"_params.txt"); err != nil {
+			log.Printf("警告: 保存参数URL失败: %v", err)
+		}
+	}
+	
+	// 保存API URL（方便API测试）
+	if len(apiURLs) > 0 {
+		if err := writeURLsToFile(apiURLs, baseFilename+"_apis.txt"); err != nil {
+			log.Printf("警告: 保存API URL失败: %v", err)
+		}
+	}
+	
+	// 保存表单URL（方便表单测试）
+	if len(formURLs) > 0 {
+		if err := writeURLsToFile(formURLs, baseFilename+"_forms.txt"); err != nil {
+			log.Printf("警告: 保存表单URL失败: %v", err)
+		}
+	}
+	
+	// 收集POST请求
+	postRequests := make([]*core.POSTRequest, 0)
+	for _, result := range results {
+		if len(result.POSTRequests) > 0 {
+			for i := range result.POSTRequests {
+				postRequests = append(postRequests, &result.POSTRequests[i])
+			}
+		}
+	}
+	
+	// 保存POST请求（新增：增强版）
+	if len(postRequests) > 0 {
+		if err := savePOSTRequests(postRequests, baseFilename+"_post_requests.txt"); err != nil {
+			log.Printf("警告: 保存POST请求失败: %v", err)
+		}
+	}
+	
+	// 打印保存统计
+	fmt.Printf("\n[+] URL保存完成:\n")
+	fmt.Printf("  - %s_all_urls.txt  : %d 个URL（全部）\n", baseFilename, len(allURLs))
+	if len(paramURLs) > 0 {
+		fmt.Printf("  - %s_params.txt    : %d 个URL（带参数）\n", baseFilename, len(paramURLs))
+	}
+	if len(apiURLs) > 0 {
+		fmt.Printf("  - %s_apis.txt      : %d 个URL（API接口）\n", baseFilename, len(apiURLs))
+	}
+	if len(formURLs) > 0 {
+		fmt.Printf("  - %s_forms.txt     : %d 个URL（表单）\n", baseFilename, len(formURLs))
+	}
+	if len(postRequests) > 0 {
+		fmt.Printf("  - %s_post_requests.txt : %d 个POST请求\n", baseFilename, len(postRequests))
+	}
+	
+	return nil
+}
+
+// savePOSTRequests 保存POST请求到文件
+func savePOSTRequests(requests []*core.POSTRequest, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	for i, req := range requests {
+		if i > 0 {
+			file.WriteString("\n")
+		}
+		
+		// 写入请求方法和URL
+		file.WriteString(fmt.Sprintf("%s %s\n", req.Method, req.URL))
+		
+		// 写入Content-Type
+		if req.ContentType != "" {
+			file.WriteString(fmt.Sprintf("  Content-Type: %s\n", req.ContentType))
+		}
+		
+		// 写入参数
+		if len(req.Parameters) > 0 {
+			file.WriteString("  Parameters:\n")
+			// 排序参数名以保持一致性
+			paramNames := make([]string, 0, len(req.Parameters))
+			for name := range req.Parameters {
+				paramNames = append(paramNames, name)
+			}
+			sort.Strings(paramNames)
+			
+			for _, name := range paramNames {
+				file.WriteString(fmt.Sprintf("    %s=%s\n", name, req.Parameters[name]))
+			}
+		}
+		
+		// 写入请求体
+		if req.Body != "" {
+			file.WriteString("  Body: ")
+			// 如果Body太长，只显示前200个字符
+			if len(req.Body) > 200 {
+				file.WriteString(req.Body[:200] + "...\n")
+			} else {
+				file.WriteString(req.Body + "\n")
+			}
+		}
+		
+		// 写入来源信息
+		if req.FromForm {
+			file.WriteString(fmt.Sprintf("  From Form: %s\n", req.FormAction))
+		}
+	}
+	
+	return nil
+}
+
+// writeURLsToFile 将URL集合写入文件
+func writeURLsToFile(urls map[string]bool, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	// 转换为切片并排序（方便查看和对比）
+	urlList := make([]string, 0, len(urls))
+	for url := range urls {
+		urlList = append(urlList, url)
+	}
+	sort.Strings(urlList)
+	
+	// 写入文件
+	for _, url := range urlList {
+		file.WriteString(url + "\n")
+	}
+	
 	return nil
 }
 
@@ -344,22 +558,27 @@ func printStats(results []*core.Result, elapsed time.Duration) {
 	fmt.Println(strings.Repeat("=", 60))
 }
 
-// printVersion 显示版本信息（v2.6 新增）
+// printVersion 显示版本信息
 func printVersion() {
-	fmt.Println("Spider Ultimate v2.6")
-	fmt.Println("Build: 2025-10-24")
+	fmt.Println("Spider Ultimate v2.10 - Pure Crawler Edition")
+	fmt.Println("Build: 2025-10-25")
 	fmt.Println("Go Version: " + strings.TrimPrefix(filepath.Base(os.Args[0]), "go"))
 	fmt.Println("")
 	fmt.Println("Features:")
 	fmt.Println("  ✓ 静态+动态双引擎爬虫")
-	fmt.Println("  ✓ 参数爆破 (GET/POST)")
-	fmt.Println("  ✓ AJAX 拦截")
-	fmt.Println("  ✓ 智能表单填充")
+	fmt.Println("  ✓ AJAX请求拦截")
+	fmt.Println("  ✓ JavaScript深度分析")
+	fmt.Println("  ✓ 跨域JS分析（60+CDN）")
+	fmt.Println("  ✓ 智能表单识别")
+	fmt.Println("  ✓ URL模式去重 🆕")
+	fmt.Println("  ✓ 业务感知过滤 🆕")
+	fmt.Println("  ✓ DOM相似度检测")
 	fmt.Println("  ✓ 技术栈检测")
 	fmt.Println("  ✓ 敏感信息检测")
-	fmt.Println("  ✓ 结构化日志系统 🆕")
-	fmt.Println("  ✓ Pipeline 支持 🆕")
+	fmt.Println("  ✓ 结构化日志系统")
+	fmt.Println("  ✓ Pipeline支持")
 	fmt.Println("")
+	fmt.Println("Positioning: Pure Web Crawler - Focus on URL Discovery")
 	fmt.Println("GitHub: https://github.com/Warren-Jace/gogospider")
 }
 
@@ -387,9 +606,10 @@ func handleStdinMode() {
 		if logLevel != "info" {
 			cfg.LogSettings.Level = strings.ToUpper(logLevel)
 		}
-		if enableFuzzing {
-			cfg.StrategySettings.EnableParamFuzzing = true
-		}
+		// 参数爆破功能已移除
+		// if enableFuzzing {
+		// 	cfg.StrategySettings.EnableParamFuzzing = true
+		// }
 		if proxy != "" {
 			cfg.AntiDetectionSettings.Proxies = []string{proxy}
 		}

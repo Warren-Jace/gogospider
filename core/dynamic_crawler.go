@@ -6,9 +6,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	
-	"github.com/chromedp/chromedp"
+
 	"spider-golang/config"
+
+	"github.com/chromedp/chromedp"
 )
 
 // DynamicCrawlerImpl 动态爬虫实现
@@ -24,9 +25,9 @@ type DynamicCrawlerImpl struct {
 // NewDynamicCrawler 创建动态爬虫实例
 func NewDynamicCrawler() *DynamicCrawlerImpl {
 	return &DynamicCrawlerImpl{
-		timeout:         180 * time.Second, // 每个请求180秒超时（3分钟）
+		timeout:         60 * time.Second, // 每个请求60秒超时（优化：从180秒降低到60秒）
 		eventTrigger:    NewEventTrigger(),
-		ajaxInterceptor: nil, // 将在Crawl方法中根据目标域名创建
+		ajaxInterceptor: nil,  // 将在Crawl方法中根据目标域名创建
 		enableEvents:    true, // 默认启用事件触发
 		enableAjax:      true, // 默认启用AJAX拦截
 	}
@@ -40,12 +41,15 @@ func (d *DynamicCrawlerImpl) SetEnableEvents(enable bool) {
 // Configure 配置动态爬虫
 func (d *DynamicCrawlerImpl) Configure(config *config.Config) {
 	d.config = config
-	
+
 	// 更新超时设置
 	if config.AntiDetectionSettings.RequestDelay > 0 {
 		d.timeout = config.AntiDetectionSettings.RequestDelay * 10
-		if d.timeout < 180*time.Second {
-			d.timeout = 180 * time.Second
+		if d.timeout < 60*time.Second {
+			d.timeout = 60 * time.Second // 优化：最小60秒
+		}
+		if d.timeout > 120*time.Second {
+			d.timeout = 120 * time.Second // 优化：最大120秒
 		}
 	}
 }
@@ -55,7 +59,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 	// 为每次爬取创建独立的上下文（优化：避免共享context超时问题）
 	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
 	defer cancel()
-	
+
 	// 设置Chrome选项（全面优化：更稳定更快速的启动参数）
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		// 基础设置
@@ -64,11 +68,11 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("disable-setuid-sandbox", true),
-		
+
 		// 跨域和安全设置
 		chromedp.Flag("disable-web-security", true), // 允许跨域
 		chromedp.Flag("allow-running-insecure-content", true),
-		
+
 		// 性能优化
 		chromedp.Flag("disable-features", "VizDisplayCompositor,IsolateOrigins,site-per-process"),
 		chromedp.Flag("disable-background-networking", true),
@@ -88,30 +92,26 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		chromedp.Flag("metrics-recording-only", true),
 		chromedp.Flag("no-first-run", true),
 		chromedp.Flag("safebrowsing-disable-auto-update", true),
-		
+
 		// 内存和资源限制
 		chromedp.Flag("force-color-profile", "srgb"),
 		chromedp.Flag("memory-pressure-off", true),
 		chromedp.Flag("max-gum-fps", "60"),
-		
+
 		// 窗口设置
 		chromedp.WindowSize(1920, 1080),
-		
+
 		// 用户代理
 		chromedp.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	)
-	
+
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancelAlloc()
-	
-	// 创建Chrome实例
+
+	// 创建Chrome实例（修复：不再重复设置超时，使用外层ctx的超时）
 	chromeCtx, cancelChrome := chromedp.NewContext(allocCtx)
 	defer cancelChrome()
-	
-	// 设置超时
-	chromeCtx, cancelTimeout := context.WithTimeout(chromeCtx, d.timeout)
-	defer cancelTimeout()
-	
+
 	result := &Result{
 		URL:          targetURL.String(),
 		Links:        make([]string, 0),
@@ -120,7 +120,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		APIs:         make([]string, 0),
 		POSTRequests: make([]POSTRequest, 0),
 	}
-	
+
 	// 检查域名范围限制
 	if d.config != nil && d.config.StrategySettings.DomainScope != "" {
 		if !strings.Contains(targetURL.Host, d.config.StrategySettings.DomainScope) {
@@ -128,24 +128,50 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			return result, nil
 		}
 	}
-	
+
 	// 启动AJAX拦截器
 	if d.enableAjax {
 		d.ajaxInterceptor = NewAjaxInterceptor(targetURL.Host)
 		d.ajaxInterceptor.StartListening(chromeCtx)
 		fmt.Println("  [动态爬虫] AJAX拦截器已启动")
 	}
-	
-	// 导航到目标页面（智能等待机制）
+
+	// 导航到目标页面（智能等待机制 + 超时保护）
 	var htmlContent string
-	err := chromedp.Run(chromeCtx,
+
+	// 使用独立的超时上下文来防止WaitVisible永久阻塞
+	navigationCtx, navigationCancel := context.WithTimeout(chromeCtx, 30*time.Second)
+	defer navigationCancel()
+
+	err := chromedp.Run(navigationCtx,
 		chromedp.Navigate(targetURL.String()),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("导航到页面失败: %v", err)
+	}
+
+	// 尝试等待body可见，但如果失败也继续（有些页面可能没有body）
+	bodyWaitCtx, bodyWaitCancel := context.WithTimeout(chromeCtx, 10*time.Second)
+	defer bodyWaitCancel()
+
+	err = chromedp.Run(bodyWaitCtx,
 		chromedp.WaitVisible("body", chromedp.ByQuery),
-		
-		// 等待初始DOM加载
-		chromedp.Sleep(2 * time.Second),
-		
-		// 等待网络空闲（所有AJAX请求完成）
+	)
+
+	if err != nil {
+		fmt.Printf("  [动态爬虫] ⚠️  等待body超时（页面可能加载慢或没有body标签），继续处理: %v\n", err)
+		// 不返回错误，继续处理
+	}
+
+	// 等待初始DOM加载（优化：从2秒降低到1秒）
+	time.Sleep(1 * time.Second)
+
+	// 等待网络空闲（所有AJAX请求完成）- 使用独立的超时
+	networkIdleCtx, networkIdleCancel := context.WithTimeout(chromeCtx, 8*time.Second)
+	defer networkIdleCancel()
+
+	err = chromedp.Run(networkIdleCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			// 注入JavaScript检测网络活动
 			var networkIdle bool
@@ -162,9 +188,16 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 				return true;
 			})()
 			`
-			
-			// 最多等待10秒，检查网络是否空闲
-			for i := 0; i < 20; i++ {
+
+			// 最多等待5秒，检查网络是否空闲（优化：从10秒降低到5秒）
+			for i := 0; i < 10; i++ {
+				// 检查上下文是否已取消
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+
 				chromedp.Evaluate(checkScript, &networkIdle).Do(ctx)
 				if networkIdle {
 					break
@@ -173,21 +206,32 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			}
 			return nil
 		}),
-		
-		// 额外等待以确保动态内容完全渲染
-		chromedp.Sleep(3 * time.Second),
-		
+	)
+
+	if err != nil {
+		fmt.Printf("  [动态爬虫] ⚠️  网络空闲检测超时，继续处理: %v\n", err)
+		// 不返回错误，继续处理
+	}
+
+	// 额外等待以确保动态内容完全渲染（优化：从3秒降低到1秒）
+	time.Sleep(1 * time.Second)
+
+	// 获取HTML内容
+	err = chromedp.Run(chromeCtx,
 		chromedp.OuterHTML("html", &htmlContent),
 	)
-	
+
 	if err != nil {
-		return nil, fmt.Errorf("导航到页面失败: %v", err)
+		return nil, fmt.Errorf("获取HTML内容失败: %v", err)
 	}
-	
-	// 提取页面信息
+
+	// 提取页面信息（添加超时保护）
 	// 获取所有链接（Phase 3增强：包括动态生成的链接）
 	var links []string
-	err = chromedp.Run(chromeCtx,
+	extractLinksCtx, extractLinksCancel := context.WithTimeout(chromeCtx, 5*time.Second)
+	defer extractLinksCancel()
+
+	err = chromedp.Run(extractLinksCtx,
 		chromedp.Evaluate(`
 		(function() {
 			var allLinks = new Set();
@@ -223,7 +267,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		})()
 		`, &links),
 	)
-	
+
 	if err == nil {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个链接\n", len(links))
 		// 检查域名范围限制
@@ -233,7 +277,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 				if err != nil {
 					continue
 				}
-				
+
 				// 检查是否在允许的域名范围内
 				if strings.Contains(parsedLink.Host, d.config.StrategySettings.DomainScope) {
 					result.Links = append(result.Links, link)
@@ -245,15 +289,18 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			result.Links = append(result.Links, links...)
 		}
 	} else {
-		fmt.Printf("  [动态爬虫] ⚠️  提取链接时出错: %v\n", err)
+		fmt.Printf("  [动态爬虫] ⚠️  提取链接超时: %v\n", err)
 	}
-	
-	// 获取所有资源链接
+
+	// 获取所有资源链接（添加超时保护）
 	var assets []string
-	err = chromedp.Run(chromeCtx,
+	extractAssetsCtx, extractAssetsCancel := context.WithTimeout(chromeCtx, 5*time.Second)
+	defer extractAssetsCancel()
+
+	err = chromedp.Run(extractAssetsCtx,
 		chromedp.Evaluate(`Array.from(document.querySelectorAll('link[href], script[src], img[src]')).map(el => el.src || el.href)`, &assets),
 	)
-	
+
 	if err == nil {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个资源\n", len(assets))
 		// 检查域名范围限制
@@ -263,7 +310,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 				if err != nil {
 					continue
 				}
-				
+
 				// 检查是否在允许的域名范围内
 				if strings.Contains(parsedAsset.Host, d.config.StrategySettings.DomainScope) {
 					result.Assets = append(result.Assets, asset)
@@ -272,11 +319,16 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		} else {
 			result.Assets = append(result.Assets, assets...)
 		}
+	} else {
+		fmt.Printf("  [动态爬虫] ⚠️  提取资源超时: %v\n", err)
 	}
-	
-	// 提取表单信息
+
+	// 提取表单信息（添加超时保护）
 	var forms []map[string]interface{}
-	err = chromedp.Run(chromeCtx,
+	extractFormsCtx, extractFormsCancel := context.WithTimeout(chromeCtx, 5*time.Second)
+	defer extractFormsCancel()
+
+	err = chromedp.Run(extractFormsCtx,
 		chromedp.Evaluate(`
 			Array.from(document.querySelectorAll('form')).map(form => {
 				const formData = {
@@ -298,7 +350,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			})
 		`, &forms),
 	)
-	
+
 	if err == nil {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个表单\n", len(forms))
 		// 转换为Form结构
@@ -308,7 +360,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 				Method: getString(formMap, "method"),
 				Fields: make([]FormField, 0),
 			}
-			
+
 			// 提取字段
 			if fields, ok := formMap["fields"].([]interface{}); ok {
 				for _, field := range fields {
@@ -323,14 +375,14 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 					}
 				}
 			}
-			
+
 			result.Forms = append(result.Forms, form)
 		}
 	}
-	
+
 	// 尝试提取API端点
 	apis := d.extractAPIsFromJS(chromeCtx)
-	
+
 	// 提取内联JavaScript中的URL（Phase 3增强）
 	inlineJSURLs := d.extractInlineJSURLs(chromeCtx)
 	if len(inlineJSURLs) > 0 {
@@ -350,13 +402,13 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			}
 		}
 	}
-	
+
 	// 自动分析表单并生成提交URL（Phase 3增强 + POST提交）
 	postRequests := d.submitFormsAndCapturePOST(chromeCtx, targetURL.String())
 	if len(postRequests) > 0 {
 		fmt.Printf("  [表单分析] 提交了 %d 个POST表单\n", len(postRequests))
 		result.POSTRequests = append(result.POSTRequests, postRequests...)
-		
+
 		// 同时添加URL到links（兼容性）
 		for _, postReq := range postRequests {
 			if postReq.Method == "GET" {
@@ -367,7 +419,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			}
 		}
 	}
-	
+
 	// 检查域名范围限制
 	if d.config != nil && d.config.StrategySettings.DomainScope != "" {
 		for _, api := range apis {
@@ -377,7 +429,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 				result.APIs = append(result.APIs, api)
 				continue
 			}
-			
+
 			// 检查是否在允许的域名范围内
 			if strings.Contains(parsedAPI.Host, d.config.StrategySettings.DomainScope) {
 				result.APIs = append(result.APIs, api)
@@ -386,7 +438,7 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 	} else {
 		result.APIs = append(result.APIs, apis...)
 	}
-	
+
 	// 获取页面状态码和内容类型（通过JavaScript）
 	var statusCode int64
 	var contentType string
@@ -394,21 +446,21 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		chromedp.Evaluate(`window.performance.getEntriesByType('navigation')[0].responseStart`, &statusCode),
 		chromedp.Evaluate(`document.contentType`, &contentType),
 	)
-	
+
 	if err == nil {
 		result.StatusCode = int(statusCode)
 		result.ContentType = contentType
 	}
-	
+
 	// 保存HTML内容供后续检测使用
 	result.HTMLContent = htmlContent
 	result.Headers = make(map[string]string)
 	result.Headers["Content-Type"] = contentType
-	
+
 	// 如果启用了事件触发，执行事件触发
 	if d.enableEvents && d.eventTrigger != nil {
 		fmt.Println("  [动态爬虫] 启动JavaScript事件触发...")
-		
+
 		// 触发事件
 		eventResult, err := d.eventTrigger.TriggerEvents(chromeCtx)
 		if err != nil {
@@ -419,23 +471,23 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 				fmt.Printf("  [事件触发] 发现 %d 个新URL\n", len(eventResult.NewURLsFound))
 				result.Links = append(result.Links, eventResult.NewURLsFound...)
 			}
-			
+
 			if len(eventResult.NewFormsFound) > 0 {
 				fmt.Printf("  [事件触发] 发现 %d 个新表单\n", len(eventResult.NewFormsFound))
 				result.Forms = append(result.Forms, eventResult.NewFormsFound...)
 			}
-			
+
 			// 可选：触发无限滚动
 			scrollCount, err := d.eventTrigger.TriggerInfiniteScroll(chromeCtx)
 			if err == nil && scrollCount > 0 {
 				fmt.Printf("  [事件触发] 执行了 %d 次滚动加载\n", scrollCount)
-				
+
 				// 滚动后重新提取链接
 				var newLinks []string
 				chromedp.Run(chromeCtx,
 					chromedp.Evaluate(`Array.from(document.querySelectorAll('a[href]')).map(a => a.href)`, &newLinks),
 				)
-				
+
 				// 合并新链接
 				for _, link := range newLinks {
 					found := false
@@ -452,13 +504,13 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			}
 		}
 	}
-	
+
 	// 收集AJAX拦截器捕获的URL
 	if d.enableAjax && d.ajaxInterceptor != nil {
 		ajaxURLs := d.ajaxInterceptor.GetInterceptedURLs()
 		if len(ajaxURLs) > 0 {
 			fmt.Printf("  [AJAX拦截] 捕获到 %d 个AJAX请求URL\n", len(ajaxURLs))
-			
+
 			// 去重并添加到结果
 			for _, ajaxURL := range ajaxURLs {
 				// 检查是否已存在
@@ -469,26 +521,26 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 						break
 					}
 				}
-				
+
 				// 如果不存在，添加
 				if !found {
 					result.Links = append(result.Links, ajaxURL)
 				}
 			}
-			
+
 			// 打印统计
 			stats := d.ajaxInterceptor.GetStatistics()
 			fmt.Printf("  [AJAX拦截] 统计: %v\n", stats)
 		}
 	}
-	
+
 	return result, nil
 }
 
 // extractAPIsFromJS 从JavaScript中提取API端点
 func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 	apis := make([]string, 0)
-	
+
 	// 获取页面中的所有脚本内容
 	var scriptContents []string
 	err := chromedp.Run(ctx,
@@ -501,11 +553,11 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 			}).filter(content => content && content.length > 0)
 		`, &scriptContents),
 	)
-	
+
 	if err != nil {
 		return apis
 	}
-	
+
 	// 分析脚本内容查找API端点
 	for _, content := range scriptContents {
 		// 跳过外部脚本链接
@@ -517,7 +569,7 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 			}
 			continue
 		}
-		
+
 		// 查找常见的API模式
 		// 使用正则表达式查找可能的API端点
 		// 查找AJAX相关的URL
@@ -525,14 +577,14 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 			// 提取/AJAX/相关的URL
 			apis = append(apis, "discovered_from_js_analysis_AJAX")
 		}
-		
+
 		// 查找API端点
 		if strings.Contains(content, "/api/") || strings.Contains(content, "/v1/") || strings.Contains(content, "/v2/") {
 			// 这里可以进一步解析具体的API端点
 			// 为简化，我们只添加标记表示发现了API相关代码
 			apis = append(apis, "discovered_from_js_analysis_API")
 		}
-		
+
 		// 查找特定的AJAX端点
 		ajaxEndpoints := []string{
 			"titles.php",
@@ -540,7 +592,7 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 			"artists.php",
 			"categories.php",
 		}
-		
+
 		for _, endpoint := range ajaxEndpoints {
 			if strings.Contains(content, endpoint) {
 				// 构造完整的URL
@@ -548,7 +600,7 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 				apis = append(apis, fullURL)
 			}
 		}
-		
+
 		// 查找更多可能的端点
 		endpoints := []string{
 			"cart.php",
@@ -559,7 +611,7 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 			"artists.php",
 			"privacy.php",
 		}
-		
+
 		for _, endpoint := range endpoints {
 			if strings.Contains(content, endpoint) {
 				// 构造完整的URL
@@ -568,7 +620,7 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 			}
 		}
 	}
-	
+
 	return apis
 }
 
@@ -576,23 +628,23 @@ func (d *DynamicCrawlerImpl) extractAPIsFromJS(ctx context.Context) []string {
 func (d *DynamicCrawlerImpl) ExecuteJS(script string) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
 	defer cancel()
-	
+
 	var result interface{}
 	err := chromedp.Run(ctx,
 		chromedp.Evaluate(script, &result),
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("执行JavaScript失败: %v", err)
 	}
-	
+
 	return result, nil
 }
 
 // extractInlineJSURLs 从内联JavaScript提取URL（Phase 3增强）
 func (d *DynamicCrawlerImpl) extractInlineJSURLs(ctx context.Context) []string {
 	urls := make([]string, 0)
-	
+
 	// 执行JavaScript提取所有内联脚本中的URL
 	var jsURLs []interface{}
 	script := `
@@ -634,7 +686,7 @@ func (d *DynamicCrawlerImpl) extractInlineJSURLs(ctx context.Context) []string {
 		return Array.from(allURLs);
 	})()
 	`
-	
+
 	err := chromedp.Run(ctx, chromedp.Evaluate(script, &jsURLs))
 	if err == nil {
 		for _, u := range jsURLs {
@@ -643,14 +695,14 @@ func (d *DynamicCrawlerImpl) extractInlineJSURLs(ctx context.Context) []string {
 			}
 		}
 	}
-	
+
 	return urls
 }
 
 // submitFormsAndCapturePOST 自动提交表单并捕获POST请求（完整实现）
 func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, baseURL string) []POSTRequest {
 	postRequests := make([]POSTRequest, 0)
-	
+
 	// 执行JavaScript收集所有表单数据
 	var formsData []interface{}
 	script := `
@@ -739,30 +791,30 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 		return allForms;
 	})()
 	`
-	
+
 	err := chromedp.Run(ctx, chromedp.Evaluate(script, &formsData))
 	if err != nil {
 		fmt.Printf("  [表单提交] JavaScript执行失败: %v\n", err)
 		return postRequests
 	}
-	
+
 	// 处理每个表单
 	for _, formData := range formsData {
 		formMap, ok := formData.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		
+
 		action := getStringFromMap(formMap, "action")
 		method := getStringFromMap(formMap, "method")
 		enctype := getStringFromMap(formMap, "enctype")
-		
+
 		// 解析action URL
 		actionURL, err := url.Parse(action)
 		if err != nil {
 			continue
 		}
-		
+
 		// 如果是相对路径，转换为绝对路径
 		if !actionURL.IsAbs() {
 			baseURLParsed, err := url.Parse(baseURL)
@@ -770,7 +822,7 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 				actionURL = baseURLParsed.ResolveReference(actionURL)
 			}
 		}
-		
+
 		// 提取字段（过滤掉submit和button类型）
 		// JavaScript已经在前端过滤了submit和button，这里直接提取即可
 		parameters := make(map[string]string)
@@ -781,7 +833,7 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 				}
 			}
 		}
-		
+
 		// 构建请求体
 		body := ""
 		if method == "POST" || method == "PUT" || method == "PATCH" {
@@ -792,7 +844,7 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 			}
 			body = values.Encode()
 		}
-		
+
 		// 创建POST请求记录
 		postReq := POSTRequest{
 			URL:         actionURL.String(),
@@ -803,7 +855,7 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 			FromForm:    true,
 			FormAction:  action,
 		}
-		
+
 		// 如果是GET方法，将参数添加到URL
 		if method == "GET" && len(parameters) > 0 {
 			query := actionURL.Query()
@@ -813,9 +865,9 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 			actionURL.RawQuery = query.Encode()
 			postReq.URL = actionURL.String()
 		}
-		
+
 		postRequests = append(postRequests, postReq)
-		
+
 		// 打印POST请求信息
 		if method == "POST" {
 			fmt.Printf("  [POST表单] %s\n", postReq.URL)
@@ -839,7 +891,7 @@ func (d *DynamicCrawlerImpl) submitFormsAndCapturePOST(ctx context.Context, base
 			}
 		}
 	}
-	
+
 	return postRequests
 }
 

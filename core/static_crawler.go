@@ -393,6 +393,67 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		}
 	})
 	
+	// 🆕 提取 srcset 属性（响应式图片）- 新功能
+	collector.OnHTML("img[srcset], source[srcset]", func(e *colly.HTMLElement) {
+		srcset := e.Attr("srcset")
+		if srcset == "" {
+			return
+		}
+		
+		// 解析srcset格式: "url1 320w, url2 640w, url3 1024w"
+		// 或: "url1 1x, url2 2x, url3 3x"
+		parts := strings.Split(srcset, ",")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			
+			// 提取URL（第一个空格前的部分）
+			fields := strings.Fields(part)
+			if len(fields) > 0 {
+				urlStr := fields[0]
+				absoluteURL := e.Request.AbsoluteURL(urlStr)
+				if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
+					result.Assets = append(result.Assets, absoluteURL)
+				}
+			}
+		}
+	})
+	
+	// 🆕 提取 picture 标签内的所有源 - 新功能
+	collector.OnHTML("picture", func(e *colly.HTMLElement) {
+		// 提取 source 标签
+		e.ForEach("source[srcset]", func(_ int, source *colly.HTMLElement) {
+			srcset := source.Attr("srcset")
+			if srcset != "" {
+				parts := strings.Split(srcset, ",")
+				for _, part := range parts {
+					part = strings.TrimSpace(part)
+					fields := strings.Fields(part)
+					if len(fields) > 0 {
+						urlStr := fields[0]
+						absoluteURL := e.Request.AbsoluteURL(urlStr)
+						if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
+							result.Assets = append(result.Assets, absoluteURL)
+						}
+					}
+				}
+			}
+		})
+		
+		// 提取 img 标签（fallback）
+		e.ForEach("img[src]", func(_ int, img *colly.HTMLElement) {
+			src := img.Attr("src")
+			if src != "" {
+				absoluteURL := e.Request.AbsoluteURL(src)
+				if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
+					result.Assets = append(result.Assets, absoluteURL)
+				}
+			}
+		})
+	})
+	
 	// 设置表单回调（增强版：捕获所有表单 + POST请求生成）
 	collector.OnHTML("form", func(e *colly.HTMLElement) {
 		action := e.Attr("action")

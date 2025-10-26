@@ -1,0 +1,401 @@
+# 网站 URL 测试大合集（增强版）
+
+**用途**：用于测试爬虫对各种网站内 URL 的发现与解析能力——不仅限于 HTML/JS，还覆盖 CSS、JSON、XML、后端模板和多种常见 web 技术的示例。
+
+> 文件包含大量示例片段（可复制成测试页面或项目），涵盖：静态 URL、相对/绝对/协议相对、查询参数、锚点、动态拼接（函数/模板字符串）、延迟加载、DOM 注入、data:/blob: URL、Base64、表单提交（multipart/x-www-form-urlencoded）、API 请求、WebSocket、Service Worker、SVG、meta-refresh、robots/sitemap、后端渲染模板（PHP/Python/Node/JSP/Rails）等。
+
+---
+
+## 目录
+
+1. HTML + JS（扩展）
+2. CSS / @import / url() / srcset
+3. 图片与媒体（srcset、picture、blob、data URI）
+4. 表单与参数（各种编码与提交方式）
+5. 动态生成 URL（函数、延迟注入、Mutation、setTimeout、事件触发）
+6. 网络请求示例（fetch、XHR、axios、WebSocket、EventSource）
+7. Service Worker / PWA 相关 URL
+8. 后端模板与语言示例（PHP、Python Flask、Node/Express、Ruby on Rails、JSP）
+9. JSON / XML / Sitemap / robots.txt 示例
+10. 其他协议与特殊 URL（mailto:, tel:, data:, blob:, file:, ftp:, magnet:, ws:）
+11. 测试用数据：Base64、混淆、拼接、注入点
+
+---
+
+## 1) HTML + JS（扩展）
+
+```html
+<!-- save as test_urls_extended.html -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Extended URL Test</title>
+  <meta http-equiv="refresh" content="10;url=/redirected.html">
+  <link rel="preload" href="/assets/app.js" as="script">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+  <h1>Extended URL Test</h1>
+
+  <!-- 常见链接 -->
+  <a href="/abs/path/page.html">abs</a>
+  <a href="https://sub.example.com/path?x=1&y=2#frag">full</a>
+  <a href="//cdn.example.net/lib.js">protocol-relative</a>
+
+  <!-- srcset / picture -->
+  <picture>
+    <source media="(min-width:800px)" srcset="/img/large.jpg">
+    <img src="/img/default.jpg" srcset="/img/320.jpg 320w, /img/640.jpg 640w" alt="pic">
+  </picture>
+
+  <!-- svg 内 href -->
+  <svg>
+    <a xlink:href="/svg/link.html"><text>svg link</text></a>
+  </svg>
+
+  <!-- ping 属性 -->
+  <a href="/outgoing" ping="/ping/collect">ping test</a>
+
+  <!-- data-* 属性与自定义属性 -->
+  <div data-api="/api/data.json" data-img="https://cdn.example.com/img.png"></div>
+
+  <!-- iframe -->
+  <iframe srcdoc='&lt;img src="/iframe/inner.jpg"&gt;'></iframe>
+
+  <!-- form examples -->
+  <form id="form1" action="/submit" method="post">
+    <input name="a" value="1">
+    <button>send</button>
+  </form>
+
+  <form id="multipart" action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file">
+  </form>
+
+  <!-- noscript -->
+  <noscript>
+    <img src="/nojs.png">
+  </noscript>
+
+  <!-- inline scripts that dynamically construct URLs -->
+  <script>
+    // 1. 复杂拼接（函数、数组 join、replace）
+    function makeUrl(user, id){
+      const proto = ['https:', ''].join('/');
+      const hostParts = ['data', 'api', 'example.com'];
+      return proto + hostParts.join('.') + ['/v', '1', '/user/', id].join('');
+    }
+    const u = makeUrl('alice', 42); // https://data.api.example.com/v1/user/42
+
+    // 2. 动态注入 DOM
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = '/delayed/generated.html?ts=' + Date.now();
+      a.textContent = 'delayed link';
+      document.body.appendChild(a);
+    }, 500);
+
+    // 3. 使用 Blob / data URI
+    fetch('/api/binary').then(r=>r.blob()).then(blob=>{
+      const url = URL.createObjectURL(blob);
+      const img = document.createElement('img');
+      img.src = url; // blob:... URL
+      document.body.appendChild(img);
+    });
+
+    // 4. 内嵌 Base64 字符串反编码（常见反爬手段）
+    const b64 = 'aHR0cHM6Ly9zZWNyZXQuZXhhbXBsZS5uZXQvZmlsZS5qcGc='; // https://secret.example.net/file.jpg
+    const decoded = atob(b64);
+    console.log('decoded:', decoded);
+
+    // 5. 属性读取并使用
+    const el = document.querySelector('[data-api]');
+    if(el){
+      fetch(el.dataset.api).then(r=>r.json()).then(j=>console.log(j));
+    }
+
+    // 6. XHR with responseType blob & arraybuffer
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/download/large.bin');
+    xhr.responseType = 'arraybuffer';
+    xhr.onload = function(){
+      // simulate creating an object url
+      const u = URL.createObjectURL(new Blob([xhr.response]));
+      const link = document.createElement('a');
+      link.href = u;
+      link.download = 'large.bin';
+      document.body.appendChild(link);
+    };
+    xhr.send();
+
+    // 7. WebSocket
+    const ws = new WebSocket('wss://socket.example.com/updates');
+    ws.onmessage = e => console.log('ws msg', e.data);
+  </script>
+</body>
+</html>
+```
+
+---
+
+## 2) CSS 示例（内联与外部）
+
+```css
+/* main.css */
+@import url('https://fonts.example.com/roboto.css');
+.header { background: url('/assets/header-bg.png') no-repeat center/cover; }
+.icon { background-image: url("data:image/svg+xml;utf8,%3Csvg...%3E"); }
+.srcset-example { background-image: image-set(url('/img/1x.jpg') 1x, url('/img/2x.jpg') 2x); }
+```
+
+CSS 中可能隐藏的 URL：`@import`、`url()`、`image-set()`、`src` in `@font-face`、`@media` 条件下的背景图。
+
+---
+
+## 3) 图片与媒体：data: 与 blob: 示例
+
+```html
+<!-- data URI (base64 or utf8) -->
+<img src="data:image/png;base64,iVBORw0KGgoAAAANS...">
+
+<!-- blob URLs are generated at runtime via JS (see上面的 fetch->blob) -->
+```
+
+---
+
+## 4) 表单与参数（全面）
+
+```html
+<!-- GET with query params -->
+<form action="/search" method="get">
+  <input name="q" value="测试">
+  <button>Search</button>
+</form>
+
+<!-- POST urlencoded -->
+<form action="/post" method="post">
+  <input name="a" value="1">
+</form>
+
+<!-- multipart upload -->
+<form action="/upload" method="post" enctype="multipart/form-data">
+  <input type="file" name="file">
+</form>
+
+<!-- JS 提交构造复杂 query 或 JSON body -->
+<script>
+  async function submit(){
+    const params = new URLSearchParams({q:'关键词', page:2});
+    await fetch('/api/search?' + params.toString());
+
+    await fetch('/api/json', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({a:1})});
+  }
+</script>
+```
+
+注意爬虫需要识别：表单 `action`、`method`、隐藏字段、JS 构造的 `FormData`、提交前的事件处理器（`onsubmit`）并抓取最终请求 URL 与参数。
+
+---
+
+## 5) 动态生成 URL（更多模式）
+
+```javascript
+// 模式汇总：
+// 1) 直接字符串
+const s1 = '/path/simple';
+// 2) 模板字符串
+const s2 = `/user/${userId}/photo`;
+// 3) 分段数组 join
+const s3 = ['https:', '', 'api.example.com', 'v1', 'res'].join('/');
+// 4) replace/regex 转换
+const s4 = ('/temp/{id}').replace('{id}', 123);
+// 5) 解密/解码后使用（base64、escape/unescape）
+const s5 = atob('...');
+// 6) 从 JSON/内嵌脚本读取
+const cfg = JSON.parse(document.getElementById('config').textContent);
+const s6 = cfg.cdn + cfg.path;
+// 7) 通过 event / user interaction 注入
+button.addEventListener('click', ()=>{ window.location = '/goto?u=' + encodeURIComponent(someVal); });
+```
+
+---
+
+## 6) 网络请求示例（fetch/axios/xhr/sse/ws）
+
+```javascript
+// fetch
+fetch('/api/items?page=1').then(r=>r.json());
+
+// axios (node/browser)
+axios.post('/api/login', {user:'a', pass:'b'});
+
+// EventSource (SSE)
+const es = new EventSource('/sse/stream');
+
+// WebSocket
+const ws = new WebSocket('ws://example.com/socket');
+
+// beacon (navigator.sendBeacon)
+navigator.sendBeacon('/collect', JSON.stringify({ev:'p'}));
+```
+
+---
+
+## 7) Service Worker / PWA 相关
+
+```javascript
+// service-worker.js
+self.addEventListener('fetch', event => {
+  // event.request.url may contain dynamic query params
+  if(event.request.url.includes('/api/')){
+    // respondWith cached or network
+  }
+});
+
+// 在主页面注册
+navigator.serviceWorker.register('/sw.js');
+```
+
+爬虫若启用了 JS 执行/无头浏览器，应观察 Service Worker 注册与拦截的请求（可能产生或重写 URL）。
+
+---
+
+## 8) 后端模板与语言示例
+
+### PHP (模板与 header 重定向)
+
+```php
+<!-- view.php -->
+<a href="<?= '/user/'.$user['id'] ?>">profile</a>
+<link rel="canonical" href="<?= htmlspecialchars($canonical) ?>">
+<?php header('Link: <https://api.example.com/>; rel="preconnect"'); ?>
+```
+
+```php
+// redirect.php
+<?php
+header('Location: https://login.example.com/?next='.urlencode($_SERVER['REQUEST_URI']));
+exit;
+?>
+```
+
+### Python Flask
+
+```python
+# app.py (Flask)
+from flask import Flask, url_for, render_template
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    # url_for 生成相对/绝对 URL
+    return render_template('index.html', api_url=url_for('api_items'))
+
+@app.route('/api/items')
+def api_items():
+    return {'items': []}
+```
+
+模板中会包含 `{{ api_url }}` 等动态 URL；爬虫需要渲染模板或解析后端生成的 HTML。
+
+### Node / Express (EJS)
+
+```ejs
+<!-- index.ejs -->
+<script>
+  const api = "<%= apiBase %>/v1"; // 服务器注入字符串
+</script>
+```
+
+### Ruby on Rails (ERB)
+
+```erb
+<%= link_to 'Home', root_path %>
+<meta property="og:image" content="<%= asset_url('og.png') %>">
+```
+
+### Java (JSP / Servlet)
+
+```jsp
+<a href="${pageContext.request.contextPath}/user/${user.id}">user</a>
+```
+
+后端模板会把 URL 写入 HTML、JS 片段或 HTTP 头部（Location、Link、Refresh 等）。
+
+---
+
+## 9) JSON / XML / Sitemap / robots
+
+```json
+// config.json
+{
+  "endpoints": ["https://api.example.com/v1/a","/local/rel/path"],
+  "images": ["data:image/png;base64,..."]
+}
+```
+
+```xml
+<!-- sitemap.xml -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/</loc></url>
+  <url><loc>https://example.com/page.html?x=1</loc></url>
+</urlset>
+```
+
+```txt
+# robots.txt
+User-agent: *
+Allow: /
+Sitemap: https://example.com/sitemap.xml
+```
+
+爬虫应能解析站点根目录下的 robots.txt 与 sitemap.xml，并从中提取 URL。
+
+---
+
+## 10) 其他协议 / 特殊 URL
+
+```text
+mailto:info@example.com
+tel:+8613800000000
+sms:+8613800000000
+ftp://ftp.example.com/resource.zip
+file:///C:/path/to/file.txt
+magnet:?xt=urn:btih:...
+bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+ws://socket.example.com
+wss://socket.example.com
+```
+
+一些站点会在页面内生成或引用非 http(s) 的链接，需要爬虫根据策略决定是否收集。
+
+---
+
+## 11) 混淆 / 隐藏 / 测试用数据
+
+```javascript
+// 混淆拼接
+const parts = ['h','t','t','p','s',':','/','/','obf.', 'example','.', 'com','/','p'];
+const obf = parts.join('');
+
+// 多重编码
+const enc = encodeURIComponent(encodeURIComponent('/path?q=1'));
+
+// JSON 内嵌字符串
+<script type="application/ld+json">
+{ "@context": "http://schema.org", "url": "https://example.com/ld" }
+</script>
+```
+
+---
+
+## 使用建议（给爬虫开发者）
+
+* **静态解析**：首先抓取 HTML、CSS、JS（静态）并从 `href`, `src`, `srcset`, `style`, `data-*`, `JSON script` 等字段提取 URL。
+* **JS 执行**：若需发现 runtime 生成的 URL，使用无头浏览器（或 JS 引擎）执行脚本，观察 DOM 变更、Network 面板请求、XHR/Fetch/WS 连接。注意 Service Worker 可能拦截请求。
+* **表单处理**：解析 `form[action]`、`method`、`enctype`，并模拟提交（必要时）以发现提交后产生的 URL。
+* **后端模板**：不能假设所有动态 URL 都在静态源里；部分 URL 仅在后端渲染后生成。
+* **安全与合规**：遵守 `robots.txt`、rate limit、登录/授权要求，避免抓取敏感或私有资源。
+
+---
