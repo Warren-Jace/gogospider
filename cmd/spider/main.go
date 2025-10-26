@@ -549,10 +549,28 @@ func main() {
 	spider := core.NewSpider(cfg)
 	defer spider.Close() // 确保资源清理
 	
-	// 🆕 v2.11: 如果指定了外部规则文件，加载它
-	if sensitiveRulesFile != "" {
-		if err := spider.MergeSensitiveRules(sensitiveRulesFile); err != nil {
-			fmt.Printf("警告: 加载敏感规则失败: %v\n", err)
+	// 🆕 v2.11: 加载敏感信息规则文件
+	if enableSensitiveDetection {
+		// 确定要加载的规则文件路径
+		rulesFile := sensitiveRulesFile
+		if rulesFile == "" {
+			// 如果用户没有指定，使用配置中的默认规则文件
+			rulesFile = cfg.SensitiveDetectionSettings.RulesFile
+		}
+		
+		// 如果有规则文件路径，尝试加载
+		if rulesFile != "" {
+			if err := spider.MergeSensitiveRules(rulesFile); err != nil {
+				fmt.Printf("⚠️  警告: 加载敏感规则失败: %v\n", err)
+				fmt.Printf("💡 提示: 请使用 -sensitive-rules 参数指定规则文件，或确保默认文件存在\n")
+				fmt.Printf("    推荐: -sensitive-rules sensitive_rules_standard.json\n")
+			} else {
+				fmt.Printf("✅ 已加载敏感信息规则文件: %s\n", rulesFile)
+			}
+		} else {
+			fmt.Printf("⚠️  警告: 敏感信息检测已启用，但未指定规则文件\n")
+			fmt.Printf("💡 请使用 -sensitive-rules 参数指定规则文件\n")
+			fmt.Printf("    示例: -sensitive-rules sensitive_rules_standard.json\n")
 		}
 	}
 
@@ -1303,10 +1321,17 @@ func handleBatchScanMode() {
 			spider := core.NewSpider(cfg)
 			defer spider.Close()
 			
-			// 🆕 如果指定了外部规则文件，加载它
-			if sensitiveRulesFile != "" {
-				if err := spider.MergeSensitiveRules(sensitiveRulesFile); err != nil {
-					fmt.Printf("  警告: 加载敏感规则失败: %v\n", err)
+			// 🆕 加载敏感信息规则文件
+			if enableSensitiveDetection {
+				rulesFile := sensitiveRulesFile
+				if rulesFile == "" {
+					rulesFile = cfg.SensitiveDetectionSettings.RulesFile
+				}
+				
+				if rulesFile != "" {
+					if err := spider.MergeSensitiveRules(rulesFile); err != nil {
+						fmt.Printf("  ⚠️  警告: 加载敏感规则失败: %v\n", err)
+					}
 				}
 			}
 			
