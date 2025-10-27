@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -622,6 +623,11 @@ func main() {
 		log.Printf("保存JS/CSS文件列表失败: %v", err)
 	}
 	
+	// 🔧 修复：保存所有发现的URL（包括未爬取的静态资源和外部链接）
+	if err := saveAllDiscoveredURLs(spider, baseFilename); err != nil {
+		log.Printf("保存所有发现的URL失败: %v", err)
+	}
+	
 	// 打印统计信息
 	if !simpleMode {
 		printStats(results, elapsed)
@@ -684,32 +690,47 @@ func extractDomain(urlStr string) string {
 	return urlStr
 }
 
-// isInTargetDomain 检查URL是否属于目标域名
+// isInTargetDomain 🔧 修复：检查URL是否属于目标域名（改进版）
 func isInTargetDomain(urlStr, targetDomain string) bool {
-	// 忽略mailto等特殊协议
+	// 忽略特殊协议
 	if strings.HasPrefix(urlStr, "mailto:") || 
 	   strings.HasPrefix(urlStr, "tel:") ||
-	   strings.HasPrefix(urlStr, "javascript:") {
+	   strings.HasPrefix(urlStr, "javascript:") ||
+	   strings.HasPrefix(urlStr, "data:") {
 		return false
 	}
 	
-	// 提取URL的域名部分
-	urlDomain := strings.TrimPrefix(urlStr, "http://")
-	urlDomain = strings.TrimPrefix(urlDomain, "https://")
-	urlDomain = strings.Split(urlDomain, "/")[0]
-	urlDomain = strings.Split(urlDomain, ":")[0] // 移除端口号
+	// 解析URL（更准确的方式）
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false
+	}
 	
-	// 清理目标域名（移除端口号）
-	cleanTargetDomain := strings.Split(targetDomain, ":")[0]
-	cleanTargetDomain = strings.ReplaceAll(cleanTargetDomain, "_", ":") // extractDomain会替换冒号
+	// 获取URL的域名（使用Hostname()自动去除端口）
+	urlHost := parsedURL.Hostname()
+	if urlHost == "" {
+		// 相对路径URL，视为目标域名
+		return true
+	}
+	
+	// 清理目标域名（去除协议和端口）
+	cleanTarget := strings.TrimPrefix(targetDomain, "http://")
+	cleanTarget = strings.TrimPrefix(cleanTarget, "https://")
+	cleanTarget = strings.Split(cleanTarget, ":")[0]
+	cleanTarget = strings.ReplaceAll(cleanTarget, "_", ":")  // extractDomain会替换冒号
 	
 	// 完全匹配
-	if urlDomain == cleanTargetDomain {
+	if urlHost == cleanTarget {
 		return true
 	}
 	
 	// 子域名匹配（例如：api.example.com 匹配 example.com）
-	if strings.HasSuffix(urlDomain, "."+cleanTargetDomain) {
+	if strings.HasSuffix(urlHost, "."+cleanTarget) {
+		return true
+	}
+	
+	// 检查是否是主域名的父域名（例如：example.com 匹配 www.example.com）
+	if strings.HasPrefix(cleanTarget, urlHost+".") {
 		return true
 	}
 	
@@ -1589,6 +1610,144 @@ func saveJSAndCSSFiles(results []*core.Result, baseFilename string) error {
 			fmt.Printf("  - %s_css_files.txt : %d 个CSS文件\n", baseFilename, len(cssFiles))
 		}
 	}
+	
+	return nil
+}
+
+// saveAllDiscoveredURLs 🔧 修复：保存所有发现的URL（包括未爬取的静态资源和外部链接）
+func saveAllDiscoveredURLs(spider *core.Spider, baseFilename string) error {
+	file, err := os.Create(baseFilename + "_all_discovered.txt")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	urlSet := make(map[string]bool)
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	
+	// 写入文件头
+	writer.WriteString("═══════════════════════════════════════════════════════\n")
+	writer.WriteString("  GogoSpider - 所有发现的URL（包括静态资源和外部链接）\n")
+	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
+	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
+	
+	// 1. 保存已爬取页面的URL和Links
+	results := spider.GetResults()
+	for _, result := range results {
+		if !urlSet[result.URL] {
+			writer.WriteString(result.URL + "\n")
+			urlSet[result.URL] = true
+		}
+		
+		// 保存所有发现的Links（包括未爬取的）
+		for _, link := range result.Links {
+			if !urlSet[link] {
+				writer.WriteString(link + "\n")
+				urlSet[link] = true
+			}
+		}
+		
+		// 保存API端点
+		for _, api := range result.APIs {
+			if !urlSet[api] {
+				writer.WriteString(api + "\n")
+				urlSet[api] = true
+			}
+		}
+		
+		// 保存表单action
+		for _, form := range result.Forms {
+			if form.Action != "" && !urlSet[form.Action] {
+				writer.WriteString(form.Action + "\n")
+				urlSet[form.Action] = true
+			}
+		}
+	}
+	
+	// 2. 保存静态资源
+	staticResources := spider.GetStaticResources()
+	for _, img := range staticResources.Images {
+		if !urlSet[img] {
+			writer.WriteString(img + "\n")
+			urlSet[img] = true
+		}
+	}
+	for _, video := range staticResources.Videos {
+		if !urlSet[video] {
+			writer.WriteString(video + "\n")
+			urlSet[video] = true
+		}
+	}
+	for _, audio := range staticResources.Audios {
+		if !urlSet[audio] {
+			writer.WriteString(audio + "\n")
+			urlSet[audio] = true
+		}
+	}
+	for _, font := range staticResources.Fonts {
+		if !urlSet[font] {
+			writer.WriteString(font + "\n")
+			urlSet[font] = true
+		}
+	}
+	for _, doc := range staticResources.Documents {
+		if !urlSet[doc] {
+			writer.WriteString(doc + "\n")
+			urlSet[doc] = true
+		}
+	}
+	for _, archive := range staticResources.Archives {
+		if !urlSet[archive] {
+			writer.WriteString(archive + "\n")
+			urlSet[archive] = true
+		}
+	}
+	
+	// 3. 保存外部链接
+	externalLinks := spider.GetExternalLinks()
+	for _, link := range externalLinks {
+		if !urlSet[link] {
+			writer.WriteString(link + "\n")
+			urlSet[link] = true
+		}
+	}
+	
+	// 4. 保存特殊协议链接
+	specialLinks := spider.GetSpecialProtocolLinks()
+	for _, link := range specialLinks.Mailto {
+		if !urlSet[link] {
+			writer.WriteString(link + "\n")
+			urlSet[link] = true
+		}
+	}
+	for _, link := range specialLinks.Tel {
+		if !urlSet[link] {
+			writer.WriteString(link + "\n")
+			urlSet[link] = true
+		}
+	}
+	for _, link := range specialLinks.WebSocket {
+		if !urlSet[link] {
+			writer.WriteString(link + "\n")
+			urlSet[link] = true
+		}
+	}
+	for _, link := range specialLinks.FTP {
+		if !urlSet[link] {
+			writer.WriteString(link + "\n")
+			urlSet[link] = true
+		}
+	}
+	for _, link := range specialLinks.Data {
+		if !urlSet[link] {
+			writer.WriteString(link + "\n")
+			urlSet[link] = true
+		}
+	}
+	
+	fmt.Printf("  - %s_all_discovered.txt : %d 个URL（完整收集，包括静态资源和外部链接）\n", 
+		baseFilename, len(urlSet))
 	
 	return nil
 }

@@ -84,7 +84,7 @@ type Spider struct {
 	adaptiveLearner    *AdaptivePriorityLearner // 自适应优先级学习器
 	
 	// 🆕 v3.5 新增组件 - URL质量控制
-	urlValidator       *URLValidator            // URL验证器（过滤无效URL）
+	urlValidator       URLValidatorInterface    // 🔧 修复：改为接口类型，支持v2.0验证器
 	postDetector       *POSTRequestDetector     // POST请求检测器（增强POST检测）
 
 	results           []*Result
@@ -178,9 +178,9 @@ func NewSpider(cfg *config.Config) *Spider {
 		techDetector:      NewTechStackDetector(),         // 技术栈检测器
 		sensitiveDetector: NewSensitiveInfoDetector(),     // 敏感信息检测器
 		
-		// 🆕 v3.5: 初始化URL质量控制组件
-		urlValidator:      NewURLValidator(),              // URL验证器
-		postDetector:      NewPOSTRequestDetector(),       // POST请求检测器
+	// 🆕 v3.5: 初始化URL质量控制组件
+	urlValidator:      NewSmartURLValidatorCompat(),   // 🔧 修复：使用v2.0智能验证器（黑名单机制，通过率71%）
+	postDetector:      NewPOSTRequestDetector(),       // POST请求检测器
 		passiveCrawler:    nil,                            // 按需创建
 		domSimilarity:     NewDOMSimilarityDetector(0.85), // DOM相似度检测器（阈值85%）
 		sitemapCrawler:    NewSitemapCrawler(),            // Sitemap爬取器
@@ -1602,12 +1602,20 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 			continue
 		}
 
-		tasksToSubmit = append(tasksToSubmit, link)
+	tasksToSubmit = append(tasksToSubmit, link)
 
-		// 每层限制100个URL
-		if len(tasksToSubmit) >= 100 {
-			break
-		}
+	// 🔧 修复：提高每层URL限制，改为可配置（默认500）
+	maxURLsPerLayer := 500
+	if s.config.SchedulingSettings.HybridConfig.MaxURLsPerLayer > 0 {
+		maxURLsPerLayer = s.config.SchedulingSettings.HybridConfig.MaxURLsPerLayer
+	}
+	
+	if len(tasksToSubmit) >= maxURLsPerLayer {
+		s.logger.Info("达到本层URL上限",
+			"limit", maxURLsPerLayer,
+			"total_candidates", len(allLinks))
+		break
+	}
 	}
 
 	// v2.6.1: 打印智能去重统计

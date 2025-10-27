@@ -24,10 +24,10 @@ type StaticCrawlerImpl struct {
 	stopChan         chan struct{}
 	duplicateHandler *DuplicateHandler
 	paramHandler     *ParamHandler
-	cookieManager    *CookieManager    // Cookie管理器（v3.2新增）
-	redirectManager  *RedirectManager  // 重定向管理器（v3.2新增）
-	urlValidator     *URLValidator     // URL验证器（v3.5新增）
-	spider           SpiderRecorder    // Spider引用（v3.7新增，用于实时记录URL）
+	cookieManager    *CookieManager       // Cookie管理器（v3.2新增）
+	redirectManager  *RedirectManager     // 重定向管理器（v3.2新增）
+	urlValidator     URLValidatorInterface // 🔧 修复：改为接口类型，支持v2.0验证器
+	spider           SpiderRecorder       // Spider引用（v3.7新增，用于实时记录URL）
 }
 
 
@@ -58,7 +58,7 @@ func NewStaticCrawler(config *config.Config, resultChan chan<- Result, stopChan 
 		stopChan:         stopChan,
 		duplicateHandler: duplicateHandler,
 		paramHandler:     paramHandler,
-		urlValidator:     NewURLValidator(), // 🆕 v3.5: 初始化URL验证器
+		urlValidator:     NewSmartURLValidatorCompat(), // 🔧 修复：使用v2.0智能验证器
 	}
 }
 
