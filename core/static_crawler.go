@@ -28,6 +28,8 @@ type StaticCrawlerImpl struct {
 	redirectManager  *RedirectManager     // 重定向管理器（v3.2新增）
 	urlValidator     URLValidatorInterface // 🔧 修复：改为接口类型，支持v2.0验证器
 	spider           SpiderRecorder       // Spider引用（v3.7新增，用于实时记录URL）
+	urlNormalizer    *URLNormalizer       // 🆕 v4.0：URL规范化处理器
+	urlQualityFilter *URLQualityFilter    // 🆕 v4.0：URL质量过滤器
 }
 
 
@@ -59,6 +61,7 @@ func NewStaticCrawler(config *config.Config, resultChan chan<- Result, stopChan 
 		duplicateHandler: duplicateHandler,
 		paramHandler:     paramHandler,
 		urlValidator:     NewSmartURLValidatorCompat(), // 🔧 修复：使用v2.0智能验证器
+		urlQualityFilter: NewURLQualityFilter(),        // 🆕 v4.0：URL质量过滤器
 	}
 }
 
@@ -225,8 +228,8 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 					extractedURL := match[1]
 					// 转换为绝对URL
 					absURL := e.Request.AbsoluteURL(extractedURL)
-					if absURL != "" && !s.duplicateHandler.IsDuplicateURL(absURL) {
-						result.Links = append(result.Links, absURL)
+					// ✅ v4.1：使用过滤器
+					if absURL != "" && s.addLinkWithFilter(result, extractedURL, absURL) {
 						validCount++
 						foundAny = true
 						fmt.Printf("    [JS提取] 从javascript:协议提取URL: %s → %s\n", extractedURL, absURL)
@@ -252,26 +255,26 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			return
 		}
 		
-		// 🆕 v3.5: 使用URL验证器过滤无效业务URL
-		if s.urlValidator != nil && !s.urlValidator.IsValidBusinessURL(absoluteURL) {
+		// ✅ v4.0: 使用统一的过滤函数添加链接
+		if s.addLinkWithFilter(result, link, absoluteURL) {
+			validCount++
+			
+			// ✅ v4.0: 协议相对URL处理 - 生成http和https两个版本
+			if strings.HasPrefix(link, "//") {
+				normalizedURLs := s.normalizeURLWithProtocolVariants(link, e.Request.URL)
+				for _, nURL := range normalizedURLs {
+					if nURL != absoluteURL {
+						// 添加协议变体（也会经过过滤）
+						if s.addLinkWithFilter(result, link, nURL) {
+							validCount++
+						}
+					}
+				}
+			}
+		} else {
 			invalidCount++
 			return
 		}
-		
-		// 检查是否重复
-		isDuplicate := s.duplicateHandler.IsDuplicateURL(absoluteURL)
-		if isDuplicate {
-			duplicateCount++
-			// 特别记录comment相关的重复URL
-			if strings.Contains(absoluteURL, "comment") {
-				fmt.Printf("    [重复过滤] comment URL: %s\n", absoluteURL)
-			}
-			// 重复的URL也不再添加到Links
-			return
-		}
-		
-		// ✅ 修复2: 始终将URL添加到result.Links（用于完整记录所有发现的URL）
-		result.Links = append(result.Links, absoluteURL)
 		
 		// 🆕 v3.7: 使用资源分类器判断URL类型
 		if s.spider != nil {
@@ -306,8 +309,14 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		action := e.Attr("action")
 		if action != "" && !strings.HasPrefix(action, "javascript:") {
 			absoluteURL := e.Request.AbsoluteURL(action)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			if absoluteURL != "" {
+				// ✅ v4.0：应用质量过滤
+				if s.urlQualityFilter == nil || func() bool {
+					valid, _ := s.urlQualityFilter.IsHighQualityURL(absoluteURL)
+					return valid
+				}() {
+                    _ = s.addLinkWithFilter(result, action, absoluteURL)
+				}
 			}
 		}
 	})
@@ -317,8 +326,14 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		src := e.Attr("src")
 		if src != "" && !strings.HasPrefix(src, "javascript:") {
 			absoluteURL := e.Request.AbsoluteURL(src)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			if absoluteURL != "" {
+				// ✅ v4.0：应用质量过滤
+				if s.urlQualityFilter == nil || func() bool {
+					valid, _ := s.urlQualityFilter.IsHighQualityURL(absoluteURL)
+					return valid
+				}() {
+                    _ = s.addLinkWithFilter(result, src, absoluteURL)
+				}
 			}
 		}
 	})
@@ -328,8 +343,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		src := e.Attr("src")
 		if src != "" && !strings.HasPrefix(src, "javascript:") {
 			absoluteURL := e.Request.AbsoluteURL(src)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			// ✅ v4.1：应用质量过滤
+			if absoluteURL != "" {
+				s.addLinkWithFilter(result, src, absoluteURL)
 			}
 		}
 	})
@@ -339,8 +355,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		src := e.Attr("src")
 		if src != "" {
 			absoluteURL := e.Request.AbsoluteURL(src)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			// ✅ v4.1：应用质量过滤
+			if absoluteURL != "" {
+				s.addLinkWithFilter(result, src, absoluteURL)
 			}
 		}
 	})
@@ -350,8 +367,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		data := e.Attr("data")
 		if data != "" {
 			absoluteURL := e.Request.AbsoluteURL(data)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			// ✅ v4.1：应用质量过滤
+			if absoluteURL != "" {
+				s.addLinkWithFilter(result, data, absoluteURL)
 			}
 		}
 	})
@@ -368,8 +386,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 					urlStr := strings.TrimPrefix(strings.ToLower(part), "url=")
 					urlStr = strings.Trim(urlStr, "'\"")
 					absoluteURL := e.Request.AbsoluteURL(urlStr)
-					if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-						result.Links = append(result.Links, absoluteURL)
+					// ✅ v4.1：应用质量过滤
+					if absoluteURL != "" {
+						s.addLinkWithFilter(result, urlStr, absoluteURL)
 					}
 					break
 				}
@@ -382,8 +401,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		href := e.Attr("href")
 		if href != "" && !strings.HasPrefix(href, "javascript:") {
 			absoluteURL := e.Request.AbsoluteURL(href)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			// ✅ v4.1：应用质量过滤
+			if absoluteURL != "" {
+				s.addLinkWithFilter(result, href, absoluteURL)
 			}
 		}
 	})
@@ -393,8 +413,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		href := e.Attr("href")
 		if href != "" {
 			absoluteURL := e.Request.AbsoluteURL(href)
-			if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
+			// ✅ v4.1：应用质量过滤
+			if absoluteURL != "" {
+				s.addLinkWithFilter(result, href, absoluteURL)
 			}
 		}
 	})
@@ -405,8 +426,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			if val := e.Attr(attr); val != "" && !strings.HasPrefix(val, "javascript:") && !strings.HasPrefix(val, "#") {
 				if strings.HasPrefix(val, "http") || strings.HasPrefix(val, "/") {
 					absoluteURL := e.Request.AbsoluteURL(val)
-					if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-						result.Links = append(result.Links, absoluteURL)
+					// ✅ v4.1：应用质量过滤
+					if absoluteURL != "" {
+						s.addLinkWithFilter(result, val, absoluteURL)
 					}
 				}
 			}
@@ -417,12 +439,13 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	collector.OnHTML("[onclick], [onmouseover], [onmousedown], [ondblclick]", func(e *colly.HTMLElement) {
 		for _, eventAttr := range []string{"onclick", "onmouseover", "onmousedown", "ondblclick"} {
 			if eventCode := e.Attr(eventAttr); eventCode != "" {
-				// 从事件代码中提取URL
+				// 从事件代码中提取URL（已包含质量过滤）
 				urls := s.extractURLsFromJSCode(eventCode)
 				for _, url := range urls {
 					absoluteURL := e.Request.AbsoluteURL(url)
-					if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-						result.Links = append(result.Links, absoluteURL)
+					// ✅ v4.1：应用质量过滤（extractURLsFromJSCode已经过滤，这里再次确认）
+					if absoluteURL != "" {
+						s.addLinkWithFilter(result, url, absoluteURL)
 					}
 				}
 			}
@@ -436,8 +459,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			if val := e.Attr(attr); val != "" && !strings.HasPrefix(val, "#") {
 				if strings.HasPrefix(val, "http") || strings.HasPrefix(val, "/") {
 					absoluteURL := e.Request.AbsoluteURL(val)
-					if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-						result.Links = append(result.Links, absoluteURL)
+					// ✅ v4.1：应用质量过滤
+					if absoluteURL != "" {
+						s.addLinkWithFilter(result, val, absoluteURL)
 					}
 				}
 			}
@@ -601,10 +625,10 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			}
 		}
 		
-		// 如果是带参数的action，也添加到链接列表
-		if strings.Contains(action, "?") && !s.duplicateHandler.IsDuplicateURL(action) {
-			result.Links = append(result.Links, action)
-		}
+        // 如果是带参数的action，也添加到链接列表（统一过滤）
+        if strings.Contains(action, "?") {
+            _ = s.addLinkWithFilter(result, action, action)
+        }
 	})
 	
 	// 设置API端点回调
@@ -653,21 +677,26 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			}
 		}
 		
-		// === 优化1：提取响应头中的URL ===
-		headerURLs := s.extractURLsFromHeaders(r)
-		for _, u := range headerURLs {
-			if !s.duplicateHandler.IsDuplicateURL(u) {
-				result.Links = append(result.Links, u)
-			}
-		}
+        // === 优化1：提取响应头中的URL（统一过滤） ===
+        headerURLs := s.extractURLsFromHeaders(r)
+        for _, u := range headerURLs {
+            _ = s.addLinkWithFilter(result, u, u)
+        }
 		
 		// === 优化2：提取内联JavaScript中的URL ===
 		if strings.Contains(result.ContentType, "text/html") {
 			inlineURLs := s.extractURLsFromInlineScripts(string(r.Body), r.Request.URL.String())
 			for _, u := range inlineURLs {
 				absoluteURL := r.Request.AbsoluteURL(u)
-				if absoluteURL != "" && !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-					result.Links = append(result.Links, absoluteURL)
+				if absoluteURL != "" {
+					// ✅ v4.0：应用质量过滤器
+					if s.urlQualityFilter != nil {
+						if valid, _ := s.urlQualityFilter.IsHighQualityURL(absoluteURL); !valid {
+							continue
+						}
+					}
+					
+                    _ = s.addLinkWithFilter(result, u, absoluteURL)
 				}
 			}
 			
@@ -786,8 +815,89 @@ func (s *StaticCrawlerImpl) generatePOSTRequestFromForm(form *Form, enctype stri
 	}
 }
 
+// addLinkWithFilter 添加链接到结果，应用所有过滤器（v4.0统一入口）
+// 这是添加链接的唯一正确方式，确保所有过滤器都被应用
+func (s *StaticCrawlerImpl) addLinkWithFilter(result *Result, rawURL string, absoluteURL string) bool {
+	// 质量过滤（第一道防线）
+	if s.urlQualityFilter != nil {
+		if valid, _ := s.urlQualityFilter.IsHighQualityURL(absoluteURL); !valid {
+			return false
+		}
+	}
+	
+	// URL验证器（第二道防线）
+	if s.urlValidator != nil {
+		if !s.urlValidator.IsValidBusinessURL(absoluteURL) {
+			return false
+		}
+	}
+	
+	// 去重检查
+	if s.duplicateHandler.IsDuplicateURL(absoluteURL) {
+		return false
+	}
+	
+	// 添加到结果
+	result.Links = append(result.Links, absoluteURL)
+	return true
+}
+
+// normalizeURLWithProtocolVariants 规范化URL并返回协议变体
+// 🆕 v4.0：处理协议相对URL，生成http和https两个版本
+func (s *StaticCrawlerImpl) normalizeURLWithProtocolVariants(rawURL string, baseURL *url.URL) []string {
+	// 创建URL规范化处理器
+	normalizer, err := NewURLNormalizer(baseURL.String())
+	if err != nil {
+		return nil
+	}
+	
+	// 获取所有规范化的URL（协议相对URL会返回2个版本）
+	normalized := normalizer.NormalizeURL(rawURL)
+	
+	// 过滤和验证
+	filtered := make([]string, 0, len(normalized))
+	for _, u := range normalized {
+		// 应用质量过滤
+		if s.urlQualityFilter != nil {
+			if valid, _ := s.urlQualityFilter.IsHighQualityURL(u); !valid {
+				continue
+			}
+		}
+		
+		// 应用URL验证器
+		if s.urlValidator != nil {
+			if !s.urlValidator.IsValidBusinessURL(u) {
+				continue
+			}
+		}
+		
+		filtered = append(filtered, u)
+	}
+	
+	return filtered
+}
+
 // resolveURL 将相对URL转换为绝对URL
+// 🆕 v4.0：返回规范化后的URL列表（协议相对URL会返回http和https两个版本）
 func resolveURL(baseURL *url.URL, relativeURL string) string {
+	// 创建URL规范化处理器
+	normalizer, err := NewURLNormalizer(baseURL.String())
+	if err != nil {
+		// 降级到旧逻辑
+		return resolveURLLegacy(baseURL, relativeURL)
+	}
+	
+	// 使用新的规范化处理器
+	normalized := normalizer.NormalizeURL(relativeURL)
+	if len(normalized) > 0 {
+		return normalized[0] // 返回第一个（主要的）
+	}
+	
+	return ""
+}
+
+// resolveURLLegacy 旧版URL解析逻辑（向下兼容）
+func resolveURLLegacy(baseURL *url.URL, relativeURL string) string {
 	// 如果relativeURL已经是绝对URL，直接返回
 	if strings.HasPrefix(relativeURL, "http://") || strings.HasPrefix(relativeURL, "https://") {
 		return relativeURL
@@ -800,6 +910,7 @@ func resolveURL(baseURL *url.URL, relativeURL string) string {
 	}
 	
 	// 如果relativeURL是协议相对URL（以//开头）
+	// 🔧 v4.0修复：默认使用HTTPS（更安全）
 	if strings.HasPrefix(relativeURL, "//") {
 		return baseURL.Scheme + ":" + relativeURL
 	}
@@ -844,7 +955,7 @@ func (s *StaticCrawlerImpl) ParseHTML(htmlContent string, baseURL *url.URL) (*Re
 		return nil, fmt.Errorf("解析HTML内容失败: %v", err)
 	}
 	
-	// 提取链接
+    // 提取链接（统一过滤）
 	doc.Find("a[href]").Each(func(i int, selection *goquery.Selection) {
 		link := selection.AttrOr("href", "")
 		// 验证链接格式，避免处理javascript:和mailto:等非HTTP链接
@@ -855,14 +966,11 @@ func (s *StaticCrawlerImpl) ParseHTML(htmlContent string, baseURL *url.URL) (*Re
 		// 转换为绝对URL
 		absoluteURL := resolveURL(baseURL, link)
 		if absoluteURL != "" {
-			// 检查是否为重复链接
-			if !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Links = append(result.Links, absoluteURL)
-			}
+            _ = s.addLinkWithFilter(result, link, absoluteURL)
 		}
 	})
 	
-	// 提取资源链接
+    // 提取资源链接（Assets中记录，Links不再重复记录）
 	doc.Find("link[href], script[src], img[src]").Each(func(i int, selection *goquery.Selection) {
 		var assetURL string
 		if selection.Is("link") {
@@ -874,10 +982,8 @@ func (s *StaticCrawlerImpl) ParseHTML(htmlContent string, baseURL *url.URL) (*Re
 		// 转换为绝对URL
 		absoluteURL := resolveURL(baseURL, assetURL)
 		if absoluteURL != "" {
-			// 检查是否为重复资源
-			if !s.duplicateHandler.IsDuplicateURL(absoluteURL) {
-				result.Assets = append(result.Assets, absoluteURL)
-			}
+            // 仅记录到 Assets
+            result.Assets = append(result.Assets, absoluteURL)
 		}
 	})
 	
@@ -1083,75 +1189,64 @@ func (s *StaticCrawlerImpl) extractURLsFromInlineScripts(htmlContent, baseURL st
 	return urls
 }
 
-// extractURLsFromJSCode 从JavaScript代码中提取URL（增强版 - 支持javascript:协议）
+// extractURLsFromJSCode 从JavaScript代码中提取URL（v4.0重写 - 使用专业提取器）
 func (s *StaticCrawlerImpl) extractURLsFromJSCode(jsCode string) []string {
+	// ✅ v4.0修复：使用专业的URL提取器
+	extractor := NewURLExtractorFix()
+	urls := extractor.ExtractFromJSCode(jsCode)
+	
+	// ✅ v4.0修复：应用质量过滤器
+	if s.urlQualityFilter != nil {
+		urls = s.urlQualityFilter.FilterURLs(urls)
+	}
+	
+	// ✅ v4.0修复：应用URL验证器（双重保险）
+	if s.urlValidator != nil {
+		filtered := make([]string, 0, len(urls))
+		for _, u := range urls {
+			if s.urlValidator.IsValidBusinessURL(u) {
+				filtered = append(filtered, u)
+			}
+		}
+		return filtered
+	}
+	
+	return urls
+}
+
+// extractURLsFromJSCodeLegacy 旧版JS代码URL提取（保留用于降级）
+func (s *StaticCrawlerImpl) extractURLsFromJSCodeLegacy(jsCode string) []string {
 	urls := make([]string, 0)
 	seen := make(map[string]bool)
 	
-	// URL提取模式（全面增强）
+	// ⚠️ 只保留最严格的匹配模式
 	patterns := []string{
-		// ===== 新增：javascript:协议中的函数调用 =====
-		`javascript:\s*\w+\s*\(\s*['"]([^'"]+\.php[^'"]*)['"]`,  // javascript:loadSomething('xxx.php')
-		`javascript:\s*\w+\s*\(\s*['"]([^'"]+)['"]`,              // javascript:func('xxx')
-		`loadSomething\s*\(\s*['"]([^'"]+)['"]`,                  // loadSomething('xxx')
-		`loadXMLDoc\s*\(\s*['"]([^'"]+)['"]`,                     // loadXMLDoc('xxx')
-		`ajaxRequest\s*\(\s*['"]([^'"]+)['"]`,                    // ajaxRequest('xxx')
-		
-		// window.location相关
-		`window\.location\s*=\s*['"]([^'"]+)['"]`,
-		`window\.location\.href\s*=\s*['"]([^'"]+)['"]`,
-		`location\.href\s*=\s*['"]([^'"]+)['"]`,
-		`location\s*=\s*['"]([^'"]+)['"]`,
-		
-		// 导航函数
-		`navigate\s*\(\s*['"]([^'"]+)['"]`,
-		`redirect\s*\(\s*['"]([^'"]+)['"]`,
-		`goto\s*\(\s*['"]([^'"]+)['"]`,
-		`window\.open\s*\(\s*['"]([^'"]+)['"]`,
-		
-		// AJAX和fetch
+		// AJAX和fetch（必须有明确的函数调用）
 		`fetch\s*\(\s*['"]([^'"]+)['"]`,
-		`ajax\s*\(\s*['"]([^'"]+)['"]`,
 		`\$\.ajax\s*\(\s*{[^}]*url\s*:\s*['"]([^'"]+)['"]`,
 		`\$\.get\s*\(\s*['"]([^'"]+)['"]`,
 		`\$\.post\s*\(\s*['"]([^'"]+)['"]`,
-		`\$\.getJSON\s*\(\s*['"]([^'"]+)['"]`,
-		`\$\.load\s*\(\s*['"]([^'"]+)['"]`,  // 新增
 		`axios\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]`,
-		`axios\s*\(\s*{[^}]*url\s*:\s*['"]([^'"]+)['"]`,
-		
-		// XMLHttpRequest
 		`xhr\.open\s*\(\s*['"](?:GET|POST)['"],\s*['"]([^'"]+)['"]`,
-		`xmlhttp\.open\s*\(\s*['"](?:GET|POST)['"],\s*['"]([^'"]+)['"]`,  // 新增
 		
-		// URL变量赋值
-		`url\s*[:=]\s*['"]([^'"]+)['"]`,
-		`href\s*[:=]\s*['"]([^'"]+)['"]`,
-		`src\s*[:=]\s*['"]([^'"]+)['"]`,
-		`endpoint\s*[:=]\s*['"]([^'"]+)['"]`,
-		`apiUrl\s*[:=]\s*['"]([^'"]+)['"]`,
-		`baseURL\s*[:=]\s*['"]([^'"]+)['"]`,
-		`path\s*[:=]\s*['"]([^'"]+)['"]`,
-		`action\s*[:=]\s*['"]([^'"]+)['"]`,
+		// window.location（必须有明确的赋值）
+		`window\.location\s*=\s*['"]([^'"]+)['"]`,
+		`location\.href\s*=\s*['"]([^'"]+)['"]`,
+		`window\.open\s*\(\s*['"]([^'"]+)['"]`,
 		
-		// 前端路由
-		`path\s*:\s*['"]([^'"]+)['"]`,
-		`route\s*:\s*['"]([^'"]+)['"]`,
+		// API配置（只匹配特定变量名）
+		`\b(?:apiUrl|baseURL|endpoint)\s*[:=]\s*['"]([^'"]+)['"]`,
 		
-		// API端点
-		`['"]/(api/[^'"]+)['"]`,
-		`['"]/(AJAX/[^'"]+)['"]`,
-		`['"]/(v\d+/[^'"]+)['"]`,
+		// API端点（必须在引号中且有/api/前缀）
+		`['"]/(api/[a-zA-Z0-9_\-/]+)['"]`,
+		`['"]/(v\d+/[a-zA-Z0-9_\-/]+)['"]`,
 		
-		// 🔧 v3.5: 优化通用路径匹配 - 要求至少3个字符，且不能是纯字母
-		// 原模式太宽松: `['"](/[a-zA-Z0-9_\-/.?=&]+)['"]`
-		// 新模式: 必须包含/或至少3个字符
-		`['"](/[a-zA-Z0-9_\-]+/[a-zA-Z0-9_\-/.?=&]+)['"]`, // 至少两段路径 /api/users
-		`['"](/[a-zA-Z0-9_\-]{3,}\.(?:php|jsp|asp|do|action)[^'"]*)['"]`, // 文件路径 /login.php
-		
-		// ===== 新增：函数参数中的.php文件 =====
-		`\w+\s*\(\s*['"]([^'"]*\.php[^'"]*)['"]`,  // anyFunc('xxx.php')
+		// 文件路径（必须有明确的文件扩展名）
+		`['"]([a-zA-Z0-9_\-/]+\.(?:php|jsp|asp|aspx|do|action|html|htm))['"]`,
 	}
+	
+	// ⚠️ 降级逻辑已废弃，统一使用专业提取器
+	// 这个函数保留只是为了向下兼容
 	
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
@@ -1159,17 +1254,10 @@ func (s *StaticCrawlerImpl) extractURLsFromJSCode(jsCode string) []string {
 		
 		for _, match := range matches {
 			if len(match) >= 2 {
-				// 获取最后一个捕获组
 				url := match[len(match)-1]
 				
-				// 过滤无效URL
-				if url == "" || url == "/" || url == "#" ||
-					strings.HasPrefix(url, "javascript:") ||
-					strings.HasPrefix(url, "mailto:") ||
-					strings.HasPrefix(url, "tel:") ||
-					strings.HasPrefix(url, "data:") ||
-					strings.Contains(url, "{{") || // 模板变量
-					strings.Contains(url, "${") {  // 模板字符串
+				// 基础过滤
+				if url == "" || url == "/" || url == "#" {
 					continue
 				}
 				

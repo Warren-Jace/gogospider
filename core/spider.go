@@ -67,6 +67,9 @@ type Spider struct {
 	sitemapCrawler     *SitemapCrawler        // Sitemap爬取器
 	assetClassifier    *AssetClassifier       // 静态资源分类器
 	ipDetector         *IPDetector            // IP地址检测器
+
+	// v4.1: URL质量过滤（用于跨域JS统一入口）
+	urlQualityFilter *URLQualityFilter
 	
 	// 🆕 v2.7+ 新增组件
 	cssAnalyzer         *CSSAnalyzer            // CSS分析器
@@ -86,6 +89,12 @@ type Spider struct {
 	// 🆕 v3.5 新增组件 - URL质量控制
 	urlValidator       URLValidatorInterface    // 🔧 修复：改为接口类型，支持v2.0验证器
 	postDetector       *POSTRequestDetector     // POST请求检测器（增强POST检测）
+	
+	// 🆕 v3.6 新增组件 - 分层去重策略
+	layeredDedup       *LayeredDeduplicator     // 分层去重器（智能分类去重）
+	
+	// 🆕 v4.2: URL规范化器（专家修复方案）
+	urlCanonicalizer   *URLCanonicalizer        // URL规范化器（IDN、去重斜杠、tracking过滤）
 
 	results           []*Result
 	sitemapURLs       []string         // 从sitemap发现的URL
@@ -181,11 +190,19 @@ func NewSpider(cfg *config.Config) *Spider {
 	// 🆕 v3.5: 初始化URL质量控制组件
 	urlValidator:      NewSmartURLValidatorCompat(),   // 🔧 修复：使用v2.0智能验证器（黑名单机制，通过率71%）
 	postDetector:      NewPOSTRequestDetector(),       // POST请求检测器
+		
+		// 🆕 v3.6: 初始化分层去重器
+		layeredDedup:      NewLayeredDeduplicator(),       // 分层去重器（智能分类去重）
+		
+		// 🆕 v4.2: 初始化URL规范化器
+		urlCanonicalizer:  NewURLCanonicalizer(),          // URL规范化器（专家修复方案）
+		
 		passiveCrawler:    nil,                            // 按需创建
 		domSimilarity:     NewDOMSimilarityDetector(0.85), // DOM相似度检测器（阈值85%）
 		sitemapCrawler:    NewSitemapCrawler(),            // Sitemap爬取器
 		assetClassifier:   NewAssetClassifier(),           // 静态资源分类器
 		ipDetector:        NewIPDetector(),                // IP地址检测器
+		urlQualityFilter:  NewURLQualityFilter(),
 		
 		// 🆕 v2.7+ 新增组件
 		cssAnalyzer:        NewCSSAnalyzer(),              // CSS分析器
@@ -609,12 +626,16 @@ func (s *Spider) addResult(result *Result) {
 					FromForm:    dp.Source == "html-form",
 					FormAction:  dp.URL,
 				}
+				
+				// 🔧 修复v3.6.1：先收集所有POST，在保存时统一去重
+				// 不在这里去重，避免遗漏来自其他来源的POST
 				result.POSTRequests = append(result.POSTRequests, postReq)
 			}
 			
 			s.logger.Info("检测到POST请求",
 				"page_url", result.URL,
-				"post_count", len(detectedPOST))
+				"post_count", len(detectedPOST),
+				"unique_count", len(result.POSTRequests))
 		}
 	}
 	
@@ -1293,11 +1314,13 @@ func (s *Spider) processCrossDomainJS() {
 				// 	continue
 				// }
 				
-				// 添加到结果中（作为发现的链接）
-				if len(s.results) > 0 {
-					s.results[0].Links = append(s.results[0].Links, u)
-					addedCount++
-				}
+            // 添加到结果中（作为发现的链接，统一过滤）
+            if len(s.results) > 0 {
+                base := &url.URL{Scheme: "https", Host: s.targetDomain}
+                if s.addLinkWithFilterToResult(s.results[0], base, u) {
+                    addedCount++
+                }
+            }
 			}
 			// if filteredCount > 0 {
 			// 	fmt.Printf("    [跨域JS过滤] 过滤了 %d 个无效URL，保留 %d 个有效URL\n", filteredCount, addedCount)
@@ -1546,16 +1569,38 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 			}
 		}
 		
-		// v2.9: URL模式去重检查
-		shouldProcess, _, reason := s.urlPatternDedup.ShouldProcess(link, "GET")
-		if !shouldProcess {
-			skippedByPattern++
-			if skippedByPattern <= 3 { // 只打印前3个，避免日志过多
-				s.logger.Debug("URL模式去重跳过",
+		// 🆕 v3.6: 分层去重检查（替代原有的简单模式去重）
+		if s.layeredDedup != nil {
+			shouldProcess, urlType, reason := s.layeredDedup.ShouldProcess(link, "GET")
+			if !shouldProcess {
+				skippedByPattern++
+				if skippedByPattern <= 5 {
+					s.logger.Debug("分层去重跳过",
+						"url", link,
+						"type", GetURLTypeString(urlType),
+						"reason", reason)
+				}
+				continue
+			}
+			// 记录URL类型（用于统计）
+			if skippedByPattern == 0 && urlType != URLTypeNormal {
+				s.logger.Info("保留特殊类型URL",
 					"url", link,
+					"type", GetURLTypeString(urlType),
 					"reason", reason)
 			}
-			continue
+		} else {
+			// 降级到原有的URL模式去重检查
+			shouldProcess, _, reason := s.urlPatternDedup.ShouldProcess(link, "GET")
+			if !shouldProcess {
+				skippedByPattern++
+				if skippedByPattern <= 3 {
+					s.logger.Debug("URL模式去重跳过",
+						"url", link,
+						"reason", reason)
+				}
+				continue
+			}
 		}
 		
 		// 去重检查
@@ -2534,6 +2579,62 @@ func (s *Spider) PrintURLFilterReport() {
 	fmt.Println("  ✓ 只保留有业务价值的URL")
 	
 	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+}
+
+// addLinkWithFilterToResult 统一添加URL到Result（跨域JS等全局入口）
+func (s *Spider) addLinkWithFilterToResult(result *Result, base *url.URL, rawURL string) bool {
+    if result == nil || base == nil || rawURL == "" {
+        return false
+    }
+
+    // 规范化与协议变体
+    normalized := make([]string, 0)
+    if normalizer, err := NewURLNormalizer(base.String()); err == nil {
+        normalized = normalizer.NormalizeURL(rawURL)
+    } else {
+        // 降级处理
+        if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") || strings.HasPrefix(rawURL, "//") {
+            normalized = []string{rawURL}
+        } else {
+            if parsed, err := url.Parse(rawURL); err == nil {
+                abs := base.ResolveReference(parsed)
+                normalized = []string{abs.String()}
+            }
+        }
+    }
+    if len(normalized) == 0 {
+        return false
+    }
+
+    added := false
+    for _, u := range normalized {
+        // 质量过滤
+        if s.urlQualityFilter != nil {
+            if valid, _ := s.urlQualityFilter.IsHighQualityURL(u); !valid {
+                continue
+            }
+        }
+        // 业务URL验证
+        if s.urlValidator != nil {
+            if !s.urlValidator.IsValidBusinessURL(u) {
+                continue
+            }
+        }
+        // 去重
+        exists := false
+        for _, existing := range result.Links {
+            if existing == u {
+                exists = true
+                break
+            }
+        }
+        if exists {
+            continue
+        }
+        result.Links = append(result.Links, u)
+        added = true
+    }
+    return added
 }
 
 // PrintPOSTDetectionReport 打印POST请求检测报告（v3.5新增）

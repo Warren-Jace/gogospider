@@ -570,62 +570,40 @@ func main() {
 	domain := extractDomain(cfg.TargetURL)
 	baseFilename := fmt.Sprintf("spider_%s_%s", domain, timestamp)
 
-	// 保存结果
-	if err := saveResults(results, baseFilename+".txt"); err != nil {
-		log.Printf("保存结果失败: %v", err)
-	}
-
-	// 保存URL列表（旧版，为了兼容性保留）
-	if err := saveURLs(results, baseFilename+"_urls.txt"); err != nil {
-		log.Printf("保存URL列表失败: %v", err)
+	// ========================================
+	// 🔧 v4.0 简化输出：只保存3个核心文件
+	// ========================================
+	
+	// 文件1: 详细数据文件（完整的爬取结果）
+	detailFile := baseFilename + "_detail.txt"
+	if err := saveDetailedResults(results, spider, detailFile); err != nil {
+		log.Printf("保存详细数据失败: %v", err)
 	}
 	
-	// 保存所有类型的URL到不同文件（新增：增强版）
-	if err := saveAllURLs(results, baseFilename); err != nil {
-		log.Printf("保存分类URL失败: %v", err)
-	}
-
-	// 🆕 v2.8: 保存去重后的URL（忽略参数值）
-	uniqueURLFile := baseFilename + "_unique_urls.txt"
-	if err := spider.SaveUniqueURLsToFile(uniqueURLFile); err != nil {
-		log.Printf("保存去重URL失败: %v", err)
+	// 文件2: 所有发现的链接地址（包括域外、静态资源等）
+	allLinksFile := baseFilename + "_all_links.txt"
+	if err := saveAllLinks(spider, results, allLinksFile); err != nil {
+		log.Printf("保存所有链接失败: %v", err)
 	}
 	
-	// 🆕 v2.11: 保存敏感信息到独立文件
+	// 文件3: 范围内的有效链接（可直接用于进一步测试）
+	inScopeFile := baseFilename + "_in_scope.txt"
+	if err := saveInScopeLinks(spider, results, inScopeFile); err != nil {
+		log.Printf("保存范围内链接失败: %v", err)
+	}
+	
+	// 🆕 敏感信息单独保存（如果启用）
 	if enableSensitiveDetection {
-		// 保存文本格式
 		sensitiveFile := baseFilename + "_sensitive.txt"
 		if err := spider.SaveSensitiveInfoToFile(sensitiveFile); err != nil {
 			log.Printf("保存敏感信息失败: %v", err)
 		}
 		
-		// 保存JSON格式（如果指定了输出文件）
 		if sensitiveOutputFile != "" {
 			if err := spider.SaveSensitiveInfoToJSON(sensitiveOutputFile); err != nil {
 				log.Printf("保存敏感信息JSON失败: %v", err)
 			}
-		} else {
-			// 默认也保存JSON格式
-			sensitiveJSONFile := baseFilename + "_sensitive.json"
-			if err := spider.SaveSensitiveInfoToJSON(sensitiveJSONFile); err != nil {
-				log.Printf("保存敏感信息JSON失败: %v", err)
-			}
 		}
-	}
-	
-	// 🆕 新增：保存排除的URL（超出范围和静态资源）
-	if err := saveExcludedURLs(spider, baseFilename); err != nil {
-		log.Printf("保存排除的URL失败: %v", err)
-	}
-	
-	// 🆕 新增：保存JS和CSS文件列表
-	if err := saveJSAndCSSFiles(results, baseFilename); err != nil {
-		log.Printf("保存JS/CSS文件列表失败: %v", err)
-	}
-	
-	// 🔧 修复：保存所有发现的URL（包括未爬取的静态资源和外部链接）
-	if err := saveAllDiscoveredURLs(spider, baseFilename); err != nil {
-		log.Printf("保存所有发现的URL失败: %v", err)
 	}
 	
 	// 打印统计信息
@@ -655,6 +633,9 @@ func main() {
 		
 		// 🆕 结构化去重: 打印结构化去重报告
 		spider.PrintStructureDeduplicationReport()
+		
+		// 🆕 v3.6: 打印分层去重统计报告（最终报告）
+		spider.PrintFinalLayeredStats()
 		
 		fmt.Printf("\n[+] 结果已保存到当前目录\n")
 	}
@@ -1612,6 +1593,300 @@ func saveJSAndCSSFiles(results []*core.Result, baseFilename string) error {
 	}
 	
 	return nil
+}
+
+// ========================================
+// v4.0 简化输出函数
+// ========================================
+
+// saveDetailedResults 保存详细的爬取数据（文件1）
+func saveDetailedResults(results []*core.Result, spider *core.Spider, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	
+	// 文件头
+	writer.WriteString("═══════════════════════════════════════════════════════\n")
+	writer.WriteString("  GogoSpider v4.0 - 详细爬取数据\n")
+	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
+	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
+	
+	// 统计摘要
+	totalPages := len(results)
+	totalLinks := 0
+	totalForms := 0
+	totalAPIs := 0
+	totalPOST := 0
+	
+	for _, r := range results {
+		totalLinks += len(r.Links)
+		totalForms += len(r.Forms)
+		totalAPIs += len(r.APIs)
+		totalPOST += len(r.POSTRequests)
+	}
+	
+	writer.WriteString(fmt.Sprintf("【统计摘要】\n"))
+	writer.WriteString(fmt.Sprintf("  爬取页面数: %d\n", totalPages))
+	writer.WriteString(fmt.Sprintf("  发现链接数: %d\n", totalLinks))
+	writer.WriteString(fmt.Sprintf("  发现表单数: %d\n", totalForms))
+	writer.WriteString(fmt.Sprintf("  发现API数:   %d\n", totalAPIs))
+	writer.WriteString(fmt.Sprintf("  POST请求数:  %d\n", totalPOST))
+	writer.WriteString("\n" + strings.Repeat("─", 55) + "\n\n")
+	
+	// 详细数据
+	for i, result := range results {
+		writer.WriteString(fmt.Sprintf("【页面 %d/%d】\n", i+1, totalPages))
+		writer.WriteString(fmt.Sprintf("URL: %s\n", result.URL))
+		writer.WriteString(fmt.Sprintf("状态码: %d\n", result.StatusCode))
+		writer.WriteString(fmt.Sprintf("内容类型: %s\n", result.ContentType))
+		
+		// 发现的链接
+		if len(result.Links) > 0 {
+			writer.WriteString(fmt.Sprintf("\n  发现的链接 (%d个):\n", len(result.Links)))
+			for _, link := range result.Links {
+				writer.WriteString(fmt.Sprintf("    • %s\n", link))
+			}
+		}
+		
+		// 表单信息
+		if len(result.Forms) > 0 {
+			writer.WriteString(fmt.Sprintf("\n  表单 (%d个):\n", len(result.Forms)))
+			for j, form := range result.Forms {
+				writer.WriteString(fmt.Sprintf("    表单 %d:\n", j+1))
+				writer.WriteString(fmt.Sprintf("      方法: %s\n", form.Method))
+				writer.WriteString(fmt.Sprintf("      动作: %s\n", form.Action))
+				if len(form.Fields) > 0 {
+					writer.WriteString(fmt.Sprintf("      字段: %v\n", form.Fields))
+				}
+			}
+		}
+		
+		// API端点
+		if len(result.APIs) > 0 {
+			writer.WriteString(fmt.Sprintf("\n  API端点 (%d个):\n", len(result.APIs)))
+			for _, api := range result.APIs {
+				writer.WriteString(fmt.Sprintf("    • %s\n", api))
+			}
+		}
+		
+		// POST请求
+		if len(result.POSTRequests) > 0 {
+			writer.WriteString(fmt.Sprintf("\n  POST请求 (%d个):\n", len(result.POSTRequests)))
+			for j, post := range result.POSTRequests {
+				writer.WriteString(fmt.Sprintf("    POST %d:\n", j+1))
+				writer.WriteString(fmt.Sprintf("      URL: %s\n", post.URL))
+				writer.WriteString(fmt.Sprintf("      方法: %s\n", post.Method))
+				if len(post.Parameters) > 0 {
+					paramsJSON, _ := json.Marshal(post.Parameters)
+					writer.WriteString(fmt.Sprintf("      参数: %s\n", string(paramsJSON)))
+				}
+			}
+		}
+		
+		writer.WriteString("\n" + strings.Repeat("─", 55) + "\n\n")
+	}
+	
+	fmt.Printf("  ✅ 详细数据: %s (%d页)\n", filename, totalPages)
+	return nil
+}
+
+// saveAllLinks 保存所有发现的链接（文件2）
+func saveAllLinks(spider *core.Spider, results []*core.Result, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	
+	// 文件头
+	writer.WriteString("═══════════════════════════════════════════════════════\n")
+	writer.WriteString("  GogoSpider v4.0 - 所有发现的链接地址\n")
+	writer.WriteString("  包括：域内、域外、静态资源、特殊协议等\n")
+	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
+	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
+	
+	urlSet := make(map[string]bool)
+	
+	// 收集所有URL
+	// 1. 爬取的页面URL
+	for _, result := range results {
+		urlSet[result.URL] = true
+		
+		// 2. 发现的链接
+		for _, link := range result.Links {
+			urlSet[link] = true
+		}
+		
+		// 3. API端点
+		for _, api := range result.APIs {
+			urlSet[api] = true
+		}
+		
+		// 4. 表单动作
+		for _, form := range result.Forms {
+			if form.Action != "" {
+				urlSet[form.Action] = true
+			}
+		}
+	}
+	
+	// 5. 静态资源
+	staticResources := spider.GetStaticResources()
+	for _, img := range staticResources.Images {
+		urlSet[img] = true
+	}
+	for _, video := range staticResources.Videos {
+		urlSet[video] = true
+	}
+	for _, audio := range staticResources.Audios {
+		urlSet[audio] = true
+	}
+	for _, font := range staticResources.Fonts {
+		urlSet[font] = true
+	}
+	for _, doc := range staticResources.Documents {
+		urlSet[doc] = true
+	}
+	for _, archive := range staticResources.Archives {
+		urlSet[archive] = true
+	}
+	
+	// 6. 外部链接
+	externalLinks := spider.GetExternalLinks()
+	for _, link := range externalLinks {
+		urlSet[link] = true
+	}
+	
+	// 7. 特殊协议链接
+	specialLinks := spider.GetSpecialProtocolLinks()
+	for _, link := range specialLinks.Mailto {
+		urlSet[link] = true
+	}
+	for _, link := range specialLinks.Tel {
+		urlSet[link] = true
+	}
+	for _, link := range specialLinks.WebSocket {
+		urlSet[link] = true
+	}
+	for _, link := range specialLinks.FTP {
+		urlSet[link] = true
+	}
+	
+	// 排序并写入
+	urlList := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		urlList = append(urlList, u)
+	}
+	sort.Strings(urlList)
+	
+	for _, u := range urlList {
+		writer.WriteString(u + "\n")
+	}
+	
+	fmt.Printf("  ✅ 所有链接: %s (%d个)\n", filename, len(urlList))
+	return nil
+}
+
+// saveInScopeLinks 保存范围内的有效链接（文件3）
+func saveInScopeLinks(spider *core.Spider, results []*core.Result, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	
+	// 文件头
+	writer.WriteString("═══════════════════════════════════════════════════════\n")
+	writer.WriteString("  GogoSpider v4.0 - 范围内的有效链接\n")
+	writer.WriteString("  说明：仅包含目标域名内的有效业务链接\n")
+	writer.WriteString("  用途：可直接用于安全测试、漏洞扫描等\n")
+	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
+	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
+	
+	urlSet := make(map[string]bool)
+	
+	// 获取目标域名
+	var targetDomain string
+	if len(results) > 0 {
+		targetDomain = extractDomain(results[0].URL)
+	}
+	
+	// 收集范围内的URL
+	for _, result := range results {
+		// 只收集目标域名内的URL
+		if isInTargetDomain(result.URL, targetDomain) {
+			urlSet[result.URL] = true
+		}
+		
+		// 发现的链接
+		for _, link := range result.Links {
+			if isInTargetDomain(link, targetDomain) {
+				// 过滤静态资源
+				if !isStaticResource(link) {
+					urlSet[link] = true
+				}
+			}
+		}
+		
+		// API端点
+		for _, api := range result.APIs {
+			if isInTargetDomain(api, targetDomain) {
+				urlSet[api] = true
+			}
+		}
+		
+		// 表单动作
+		for _, form := range result.Forms {
+			if form.Action != "" && isInTargetDomain(form.Action, targetDomain) {
+				urlSet[form.Action] = true
+			}
+		}
+	}
+	
+	// 排序并写入
+	urlList := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		urlList = append(urlList, u)
+	}
+	sort.Strings(urlList)
+	
+	for _, u := range urlList {
+		writer.WriteString(u + "\n")
+	}
+	
+	fmt.Printf("  ✅ 范围内链接: %s (%d个，可直接用于测试)\n", filename, len(urlList))
+	return nil
+}
+
+// isStaticResource 判断是否为静态资源
+func isStaticResource(urlStr string) bool {
+	lowerURL := strings.ToLower(urlStr)
+	staticExts := []string{
+		".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".webp", ".bmp",
+		".css", ".scss", ".sass",
+		".woff", ".woff2", ".ttf", ".eot", ".otf",
+		".mp4", ".mp3", ".avi", ".mov", ".wmv", ".flv",
+		".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+		".zip", ".rar", ".tar", ".gz", ".7z",
+	}
+	
+	for _, ext := range staticExts {
+		if strings.HasSuffix(lowerURL, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // saveAllDiscoveredURLs 🔧 修复：保存所有发现的URL（包括未爬取的静态资源和外部链接）

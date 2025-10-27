@@ -79,6 +79,63 @@ func (v *SmartURLValidator) IsValidBusinessURL(rawURL string) (bool, string) {
 		return false, "空URL"
 	}
 	
+	// ========================================
+	// 🔧 v3.6.3: 黑名单快速检查（提前拦截垃圾数据）
+	// ========================================
+	
+	// 1.1a JavaScript关键字黑名单
+	jsKeywords := []string{
+		"get", "set", "post", "put", "delete", "patch",
+		"function", "return", "var", "let", "const",
+		"true", "false", "null", "undefined",
+		"typeof", "instanceof", "arguments",
+		"this", "super", "new", "class",
+	}
+	lowerURL := strings.ToLower(trimmed)
+	for _, keyword := range jsKeywords {
+		if lowerURL == keyword {
+			v.filteredByJSCode++
+			return false, "JavaScript关键字"
+		}
+	}
+	
+	// 1.1b CSS属性黑名单
+	cssProperties := []string{
+		"margin", "padding", "border", "color",
+		"width", "height", "display", "position",
+		"rgba", "rgb", "hsl", "flex", "grid",
+		"font", "background", "text", "align",
+		"auto", "none", "center", "left", "right",
+	}
+	for _, prop := range cssProperties {
+		if lowerURL == prop || strings.HasPrefix(lowerURL, prop+"-") {
+			v.filteredByHTMLTag++
+			return false, "CSS属性"
+		}
+	}
+	
+	// 1.1c 单字符
+	if len(trimmed) == 1 {
+		v.filteredBySymbol++
+		return false, "单字符"
+	}
+	
+	// 1.1d 纯数字
+	if matched, _ := regexp.MatchString(`^\d+$`, trimmed); matched {
+		v.filteredBySymbol++
+		return false, "纯数字"
+	}
+	
+	// 1.1e 颜色值（十六进制）
+	if matched, _ := regexp.MatchString(`^#[0-9A-Fa-f]{3,8}$`, trimmed); matched {
+		v.filteredBySymbol++
+		return false, "颜色值"
+	}
+	
+	// ========================================
+	// 黑名单检查结束
+	// ========================================
+	
 	// 1.2 长度检查（防止恶意超长URL）
 	if len(rawURL) > v.maxURLLength {
 		v.filteredByLength++

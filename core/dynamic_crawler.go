@@ -21,6 +21,9 @@ type DynamicCrawlerImpl struct {
 	enableEvents    bool             // 是否启用事件触发
 	enableAjax      bool             // 是否启用AJAX拦截
 	spider          SpiderRecorder   // Spider引用（v3.7新增，用于实时记录URL）
+	// v4.1: 质量过滤与验证（与静态爬虫一致的双重防护）
+	urlQualityFilter *URLQualityFilter
+	urlValidator     URLValidatorInterface
 }
 
 // NewDynamicCrawler 创建动态爬虫实例
@@ -31,6 +34,8 @@ func NewDynamicCrawler() *DynamicCrawlerImpl {
 		ajaxInterceptor: nil,  // 将在Crawl方法中根据目标域名创建
 		enableEvents:    true, // 默认启用事件触发
 		enableAjax:      true, // 默认启用AJAX拦截
+        urlQualityFilter: NewURLQualityFilter(),
+        urlValidator:     NewSmartURLValidatorCompat(),
 	}
 }
 
@@ -278,7 +283,9 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个链接\n", len(links))
 		// ✅ 修复3: 所有链接都添加到result.Links（无论域名范围）
 		// 这样可以确保详细报告包含所有发现的链接
-		result.Links = append(result.Links, links...)
+		for _, l := range links {
+			_ = d.addLinkWithFilter(result, targetURL, l)
+		}
 		
 		// 检查域名范围限制（仅用于后续过滤）
 		if d.config != nil && d.config.StrategySettings.DomainScope != "" {
@@ -313,10 +320,8 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 
 	if err == nil {
 		fmt.Printf("  [动态爬虫] 从页面提取到 %d 个资源\n", len(assets))
-		// ✅ 修复4: 所有资源都添加到result.Assets和result.Links
+		// v4.1: 仅记录到 Assets，不再扩散到 Links
 		result.Assets = append(result.Assets, assets...)
-		// 资源也添加到Links中，确保完整记录
-		result.Links = append(result.Links, assets...)
 		
 		// 检查域名范围限制（仅用于统计）
 		if d.config != nil && d.config.StrategySettings.DomainScope != "" {
@@ -404,19 +409,8 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 	inlineJSURLs := d.extractInlineJSURLs(chromeCtx)
 	if len(inlineJSURLs) > 0 {
 		fmt.Printf("  [JS分析] 从内联脚本提取了 %d 个URL\n", len(inlineJSURLs))
-		// 添加到链接列表
 		for _, jsURL := range inlineJSURLs {
-			// 去重
-			found := false
-			for _, existing := range result.Links {
-				if existing == jsURL {
-					found = true
-					break
-				}
-			}
-			if !found {
-				result.Links = append(result.Links, jsURL)
-			}
+			_ = d.addLinkWithFilter(result, targetURL, jsURL)
 		}
 	}
 
@@ -426,14 +420,9 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		fmt.Printf("  [表单分析] 提交了 %d 个POST表单\n", len(postRequests))
 		result.POSTRequests = append(result.POSTRequests, postRequests...)
 
-		// 同时添加URL到links（兼容性）
+		// 同时添加URL到links（过滤后）
 		for _, postReq := range postRequests {
-			if postReq.Method == "GET" {
-				result.Links = append(result.Links, postReq.URL)
-			} else {
-				// POST请求也记录URL
-				result.Links = append(result.Links, postReq.URL)
-			}
+			_ = d.addLinkWithFilter(result, targetURL, postReq.URL)
 		}
 	}
 
@@ -484,10 +473,12 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 			fmt.Printf("  [事件触发] 执行出错: %v\n", err)
 		} else {
 			// 合并事件触发发现的URL和表单
-			if len(eventResult.NewURLsFound) > 0 {
-				fmt.Printf("  [事件触发] 发现 %d 个新URL\n", len(eventResult.NewURLsFound))
-				result.Links = append(result.Links, eventResult.NewURLsFound...)
-			}
+            if len(eventResult.NewURLsFound) > 0 {
+                fmt.Printf("  [事件触发] 发现 %d 个新URL\n", len(eventResult.NewURLsFound))
+                for _, u := range eventResult.NewURLsFound {
+                    _ = d.addLinkWithFilter(result, targetURL, u)
+                }
+            }
 
 			if len(eventResult.NewFormsFound) > 0 {
 				fmt.Printf("  [事件触发] 发现 %d 个新表单\n", len(eventResult.NewFormsFound))
@@ -514,9 +505,9 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 							break
 						}
 					}
-					if !found {
-						result.Links = append(result.Links, link)
-					}
+			if !found {
+				_ = d.addLinkWithFilter(result, targetURL, link)
+			}
 				}
 			}
 		}
@@ -528,21 +519,9 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		if len(ajaxURLs) > 0 {
 			fmt.Printf("  [AJAX拦截] 捕获到 %d 个AJAX请求URL\n", len(ajaxURLs))
 
-			// 去重并添加到结果
+			// 添加到结果（过滤后）
 			for _, ajaxURL := range ajaxURLs {
-				// 检查是否已存在
-				found := false
-				for _, existing := range result.Links {
-					if existing == ajaxURL {
-						found = true
-						break
-					}
-				}
-
-				// 如果不存在，添加
-				if !found {
-					result.Links = append(result.Links, ajaxURL)
-				}
+				_ = d.addLinkWithFilter(result, targetURL, ajaxURL)
 			}
 
 			// 打印统计
@@ -656,6 +635,64 @@ func (d *DynamicCrawlerImpl) ExecuteJS(script string) (interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// addLinkWithFilter 添加链接到结果，应用质量过滤、URL验证和规范化（v4.1统一入口）
+func (d *DynamicCrawlerImpl) addLinkWithFilter(result *Result, baseURL *url.URL, rawURL string) bool {
+    if result == nil || baseURL == nil || rawURL == "" {
+        return false
+    }
+
+    // 规范化与协议变体
+    normalized := make([]string, 0)
+    if normalizer, err := NewURLNormalizer(baseURL.String()); err == nil {
+        normalized = normalizer.NormalizeURL(rawURL)
+    } else {
+        // 降级：尽量构造绝对URL
+        if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") || strings.HasPrefix(rawURL, "//") {
+            normalized = []string{rawURL}
+        } else {
+            if parsed, err := url.Parse(rawURL); err == nil {
+                abs := baseURL.ResolveReference(parsed)
+                normalized = []string{abs.String()}
+            }
+        }
+    }
+
+    if len(normalized) == 0 {
+        return false
+    }
+
+    added := false
+    for _, u := range normalized {
+        // 质量过滤（第一道防线）
+        if d.urlQualityFilter != nil {
+            if valid, _ := d.urlQualityFilter.IsHighQualityURL(u); !valid {
+                continue
+            }
+        }
+        // URL验证（第二道防线）
+        if d.urlValidator != nil {
+            if !d.urlValidator.IsValidBusinessURL(u) {
+                continue
+            }
+        }
+        // 结果内去重
+        exists := false
+        for _, existing := range result.Links {
+            if existing == u {
+                exists = true
+                break
+            }
+        }
+        if exists {
+            continue
+        }
+        result.Links = append(result.Links, u)
+        added = true
+    }
+
+    return added
 }
 
 // extractInlineJSURLs 从内联JavaScript提取URL（Phase 3增强）

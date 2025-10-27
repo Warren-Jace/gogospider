@@ -7,10 +7,14 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // DuplicateHandler 去重处理器
 type DuplicateHandler struct {
+	// 🔧 修复：添加互斥锁保护并发访问
+	mutex sync.RWMutex
+	
 	// 已处理URL的哈希集合
 	processedURLs map[string]bool
 	
@@ -37,6 +41,11 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 	if err != nil {
 		// 如果无法解析URL，则使用原始去重逻辑
 		hash := d.calculateMD5(rawURL)
+		
+		// 🔧 修复：加锁保护并发访问
+		d.mutex.Lock()
+		defer d.mutex.Unlock()
+		
 		if _, exists := d.processedURLs[hash]; exists {
 			return true
 		}
@@ -76,6 +85,10 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 	// 计算URL键值的MD5哈希
 	hash := d.calculateMD5(urlKey)
 	
+	// 🔧 修复：加锁保护并发访问
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	
 	// 检查是否已处理过
 	if _, exists := d.processedURLs[hash]; exists {
 		return true
@@ -90,6 +103,10 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 func (d *DuplicateHandler) IsDuplicateContent(content string) bool {
 	// 计算内容的MD5哈希
 	hash := d.calculateMD5(content)
+	
+	// 🔧 修复：加锁保护并发访问
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
 	
 	// 检查是否已处理过
 	if _, exists := d.processedContent[hash]; exists {
@@ -253,6 +270,10 @@ func (d *DuplicateHandler) calculateFeatureSimilarity(features1, features2 map[s
 
 // ClearProcessed 清空已处理记录
 func (d *DuplicateHandler) ClearProcessed() {
+	// 🔧 修复：加锁保护并发访问
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	
 	d.processedURLs = make(map[string]bool)
 	d.processedContent = make(map[string]bool)
 }
