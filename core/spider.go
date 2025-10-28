@@ -61,6 +61,7 @@ type Spider struct {
 	// 高级功能组件
 	techDetector       *TechStackDetector     // 技术栈检测器
 	sensitiveDetector  *SensitiveInfoDetector // 敏感信息检测器
+	sensitiveManager   *SensitiveInfoManager  // 🆕 v4.2: 敏感信息统一管理器
 	passiveCrawler     *PassiveCrawler        // 被动爬取器
 	subdomainExtractor *SubdomainExtractor    // 子域名提取器
 	domSimilarity      *DOMSimilarityDetector // DOM相似度检测器
@@ -95,8 +96,12 @@ type Spider struct {
 	
 	// 🆕 v4.2: URL规范化器（专家修复方案）
 	urlCanonicalizer   *URLCanonicalizer        // URL规范化器（IDN、去重斜杠、tracking过滤）
+	
+	// 🆕 v4.2: 统一URL过滤管理器
+	filterManager      *URLFilterManager         // 统一的URL过滤管理器
 
 	results           []*Result
+	degradedURLs      []string         // 降级的URL（记录但不爬取）
 	sitemapURLs       []string         // 从sitemap发现的URL
 	robotsURLs        []string         // 从robots.txt发现的URL
 	externalLinks     []string         // 记录外部链接
@@ -230,6 +235,7 @@ func NewSpider(cfg *config.Config) *Spider {
 		sitemapURLs:         make([]string, 0),
 		robotsURLs:          make([]string, 0),
 		visitedURLs:         make(map[string]bool),
+		degradedURLs:        make([]string, 0),
 
 		// 初始化资源管理
 		done:   make(chan struct{}),
@@ -238,7 +244,11 @@ func NewSpider(cfg *config.Config) *Spider {
 		// v2.6: 初始化日志
 		logger: logger,
 	}
-
+	
+	// 🆕 v4.2: 初始化统一URL过滤管理器
+	// 注意：targetDomain在Start()时才设置，这里先不初始化
+	// 过滤管理器将在Start()时延迟初始化
+	
 	// 配置各个组件
 	spider.staticCrawler.Configure(cfg)
 	spider.dynamicCrawler.Configure(cfg)
@@ -319,6 +329,11 @@ func (s *Spider) Start(targetURL string) error {
 		return fmt.Errorf("无效的URL: %v", err)
 	}
 	s.targetDomain = parsedURL.Host
+	
+	// 🆕 v4.2: 初始化URL过滤管理器（在targetDomain设置后）
+	if s.config.FilterSettings.Enabled && s.filterManager == nil {
+		s.filterManager = s.initializeFilterManager(s.config)
+	}
 
 	// 设置JS分析器的目标域名
 	s.jsAnalyzer.SetTargetDomain(s.targetDomain)
@@ -1539,115 +1554,149 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 	skippedByLoginWall := 0 // 🆕 v3.2 统计登录墙跳过的数量
 	
 	for link := range allLinks {
-		// 🆕 v3.2: 登录墙检测 - 跳过重复的登录页面变体
-		if s.loginWallDetector != nil {
-			shouldSkip, reason := s.loginWallDetector.ShouldSkipURL(link)
-			if shouldSkip {
-				skippedByLoginWall++
-				if skippedByLoginWall <= 3 {
-					s.logger.Debug("登录墙过滤",
-						"url", link,
-						"reason", reason)
-				}
-				continue
-			}
-		}
-		
-		// 🆕 v3.1: 使用exclude_extensions判断是否需要请求
-		// JS/CSS文件始终请求，其他被排除的扩展名只记录不请求
-		if s.scopeController != nil {
-			shouldRequest, reason := s.scopeController.ShouldRequestURL(link)
-			if !shouldRequest {
+		// 🆕 v4.2: 使用统一的过滤管理器（如果启用）
+		if s.filterManager != nil && s.config.FilterSettings.Enabled {
+			// 统一过滤入口
+			result := s.filterManager.Filter(link, map[string]interface{}{
+				"depth":       targetDepth,
+				"method":      "GET",
+				"source_type": "html",
+			})
+			
+			// 处理过滤结果
+			switch result.Action {
+			case FilterAllow:
+				// 允许爬取
+				tasksToSubmit = append(tasksToSubmit, link)
+				
+			case FilterDegrade:
+				// 降级：记录但不爬取
+				s.RecordDegradedURL(link, result.Reason)
 				skippedByResourceType++
-				if skippedByResourceType <= 5 {
-					s.logger.Debug("扩展名过滤：只记录不请求",
-						"url", link,
-						"reason", reason)
-				}
-				// URL已被记录（在addResult中），这里只是跳过HTTP请求
+				
+			case FilterReject:
+				// 拒绝：跳过
+				skippedByPattern++
 				continue
 			}
-		}
-		
-		// 🆕 v3.6: 分层去重检查（替代原有的简单模式去重）
-		if s.layeredDedup != nil {
-			shouldProcess, urlType, reason := s.layeredDedup.ShouldProcess(link, "GET")
-			if !shouldProcess {
-				skippedByPattern++
-				if skippedByPattern <= 5 {
-					s.logger.Debug("分层去重跳过",
+			
+			// 基础去重检查（仍然需要）
+			if s.duplicateHandler.IsDuplicateURL(link) {
+				continue
+			}
+			
+		} else {
+			// 降级到旧的过滤逻辑（向后兼容）
+			// 🆕 v3.2: 登录墙检测 - 跳过重复的登录页面变体
+			if s.loginWallDetector != nil {
+				shouldSkip, reason := s.loginWallDetector.ShouldSkipURL(link)
+				if shouldSkip {
+					skippedByLoginWall++
+					if skippedByLoginWall <= 3 {
+						s.logger.Debug("登录墙过滤",
+							"url", link,
+							"reason", reason)
+					}
+					continue
+				}
+			}
+			
+			// 🆕 v3.1: 使用exclude_extensions判断是否需要请求
+			// JS/CSS文件始终请求，其他被排除的扩展名只记录不请求
+			if s.scopeController != nil {
+				shouldRequest, reason := s.scopeController.ShouldRequestURL(link)
+				if !shouldRequest {
+					skippedByResourceType++
+					if skippedByResourceType <= 5 {
+						s.logger.Debug("扩展名过滤：只记录不请求",
+							"url", link,
+							"reason", reason)
+					}
+					// URL已被记录（在addResult中），这里只是跳过HTTP请求
+					continue
+				}
+			}
+			
+			// 🆕 v3.6: 分层去重检查（替代原有的简单模式去重）
+			if s.layeredDedup != nil {
+				shouldProcess, urlType, reason := s.layeredDedup.ShouldProcess(link, "GET")
+				if !shouldProcess {
+					skippedByPattern++
+					if skippedByPattern <= 5 {
+						s.logger.Debug("分层去重跳过",
+							"url", link,
+							"type", GetURLTypeString(urlType),
+							"reason", reason)
+					}
+					continue
+				}
+				// 记录URL类型（用于统计）
+				if skippedByPattern == 0 && urlType != URLTypeNormal {
+					s.logger.Info("保留特殊类型URL",
 						"url", link,
 						"type", GetURLTypeString(urlType),
 						"reason", reason)
 				}
+			} else {
+				// 降级到原有的URL模式去重检查
+				shouldProcess, _, reason := s.urlPatternDedup.ShouldProcess(link, "GET")
+				if !shouldProcess {
+					skippedByPattern++
+					if skippedByPattern <= 3 {
+						s.logger.Debug("URL模式去重跳过",
+							"url", link,
+							"reason", reason)
+					}
+					continue
+				}
+			}
+			
+			// 去重检查
+			if s.duplicateHandler.IsDuplicateURL(link) {
 				continue
 			}
-			// 记录URL类型（用于统计）
-			if skippedByPattern == 0 && urlType != URLTypeNormal {
-				s.logger.Info("保留特殊类型URL",
-					"url", link,
-					"type", GetURLTypeString(urlType),
-					"reason", reason)
+
+			// v2.6.1: 智能参数值去重检查
+			if s.config.DeduplicationSettings.EnableSmartParamDedup {
+				shouldCrawl, reason := s.smartParamDedup.ShouldCrawl(link)
+				if !shouldCrawl {
+					skippedBySmart++
+					if skippedBySmart <= 5 { // 只打印前5个，避免日志过多
+						fmt.Printf("  [智能去重] 跳过: %s\n  原因: %s\n", link, reason)
+					}
+					continue
+				}
 			}
-		} else {
-			// 降级到原有的URL模式去重检查
-			shouldProcess, _, reason := s.urlPatternDedup.ShouldProcess(link, "GET")
-			if !shouldProcess {
-				skippedByPattern++
-				if skippedByPattern <= 3 {
-					s.logger.Debug("URL模式去重跳过",
+
+			// v2.7: 业务感知过滤检查
+			if s.config.DeduplicationSettings.EnableBusinessAwareFilter {
+				shouldCrawl, reason, score := s.businessFilter.ShouldCrawlURL(link)
+				if !shouldCrawl {
+					skippedByBusiness++
+					if skippedByBusiness <= 5 { // 只打印前5个，避免日志过多
+						s.logger.Debug("业务感知过滤跳过URL",
+							"url", link,
+							"reason", reason,
+							"score", score)
+					}
+					continue
+				}
+				// 记录高价值URL
+				if score >= s.config.DeduplicationSettings.BusinessFilterHighValueThreshold {
+					s.logger.Info("发现高价值URL",
 						"url", link,
+						"score", score,
 						"reason", reason)
 				}
+			}
+
+			// 验证格式
+			if !IsValidURL(link) {
 				continue
 			}
-		}
-		
-		// 去重检查
-		if s.duplicateHandler.IsDuplicateURL(link) {
-			continue
-		}
 
-		// v2.6.1: 智能参数值去重检查
-		if s.config.DeduplicationSettings.EnableSmartParamDedup {
-			shouldCrawl, reason := s.smartParamDedup.ShouldCrawl(link)
-			if !shouldCrawl {
-				skippedBySmart++
-				if skippedBySmart <= 5 { // 只打印前5个，避免日志过多
-					fmt.Printf("  [智能去重] 跳过: %s\n  原因: %s\n", link, reason)
-				}
-				continue
-			}
+			tasksToSubmit = append(tasksToSubmit, link)
 		}
-
-		// v2.7: 业务感知过滤检查
-		if s.config.DeduplicationSettings.EnableBusinessAwareFilter {
-			shouldCrawl, reason, score := s.businessFilter.ShouldCrawlURL(link)
-			if !shouldCrawl {
-				skippedByBusiness++
-				if skippedByBusiness <= 5 { // 只打印前5个，避免日志过多
-					s.logger.Debug("业务感知过滤跳过URL",
-						"url", link,
-						"reason", reason,
-						"score", score)
-				}
-				continue
-			}
-			// 记录高价值URL
-			if score >= s.config.DeduplicationSettings.BusinessFilterHighValueThreshold {
-				s.logger.Info("发现高价值URL",
-					"url", link,
-					"score", score,
-					"reason", reason)
-			}
-		}
-
-		// 验证格式
-		if !IsValidURL(link) {
-			continue
-		}
-
-	tasksToSubmit = append(tasksToSubmit, link)
 
 	// 🔧 修复：提高每层URL限制，改为可配置（默认500）
 	maxURLsPerLayer := 500
@@ -2331,6 +2380,7 @@ func (s *Spider) PrintURLPatternDedupReport() {
 }
 
 // SaveSensitiveInfoToFile 保存敏感信息到文件（独立输出，包含来源URL）
+// ⚠️ 已废弃：建议使用 ExportSensitiveInfoUnified() 统一导出多种格式
 func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -2434,6 +2484,7 @@ func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
 }
 
 // SaveSensitiveInfoToJSON 保存敏感信息到JSON文件
+// ⚠️ 已废弃：建议使用 ExportSensitiveInfoUnified() 统一导出多种格式
 func (s *Spider) SaveSensitiveInfoToJSON(filepath string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -2475,6 +2526,39 @@ func (s *Spider) SaveSensitiveInfoToJSON(filepath string) error {
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 	
 	return nil
+}
+
+// ExportSensitiveInfoUnified 🆕 v4.2: 统一导出敏感信息（多种格式）
+// 这是推荐的敏感信息导出方法，会自动生成：
+// - TXT格式（详细文本报告）
+// - JSON格式（结构化数据）
+// - CSV格式（Excel兼容表格）
+// - HTML格式（可视化报告）
+// - Summary（快速摘要）
+func (s *Spider) ExportSensitiveInfoUnified(outputDir string, baseFilename string) error {
+	s.mutex.Lock()
+	
+	if s.sensitiveDetector == nil {
+		s.mutex.Unlock()
+		return fmt.Errorf("敏感信息检测器未初始化")
+	}
+	
+	// 初始化统一管理器（如果尚未初始化）
+	if s.sensitiveManager == nil {
+		s.sensitiveManager = NewSensitiveInfoManager(SensitiveInfoManagerConfig{
+			TargetDomain: s.targetDomain,
+			OutputDir:    outputDir,
+			BaseFilename: baseFilename,
+			Detector:     s.sensitiveDetector,
+		})
+	}
+	s.mutex.Unlock()
+	
+	// 收集并去重敏感信息
+	s.sensitiveManager.CollectFindings()
+	
+	// 导出所有格式
+	return s.sensitiveManager.ExportAll()
 }
 
 // SaveStructureUniqueURLsToFile 保存结构化去重后的URL到文件
@@ -2533,8 +2617,90 @@ func (s *Spider) PrintStructureDeduplicationReport() {
 	}
 }
 
+// PrintFinalLayeredStats 打印分层去重最终统计报告（v3.6新增）
+func (s *Spider) PrintFinalLayeredStats() {
+	if s.layeredDedup == nil {
+		return
+	}
+	s.PrintLayeredDeduplicationReport()
+}
+
+// initializeFilterManager 初始化URL过滤管理器（v4.2新增）
+func (s *Spider) initializeFilterManager(cfg *config.Config) *URLFilterManager {
+	// 解析预设模式
+	preset := PresetBalanced // 默认
+	switch strings.ToLower(cfg.FilterSettings.Preset) {
+	case "strict":
+		preset = PresetStrict
+	case "loose":
+		preset = PresetLoose
+	case "api_only":
+		preset = PresetAPIOnly
+	case "deep_scan":
+		preset = PresetDeepScan
+	default:
+		preset = PresetBalanced
+	}
+	
+	// 创建过滤管理器
+	manager := NewURLFilterManagerWithPreset(preset, s.targetDomain)
+	
+	// 应用自定义配置（覆盖预设）
+	if cfg.FilterSettings.EnableCaching {
+		manager.config.EnableCaching = true
+		manager.config.CacheSize = cfg.FilterSettings.CacheSize
+	}
+	
+	if cfg.FilterSettings.EnableEarlyStop {
+		manager.config.EnableEarlyStop = true
+	}
+	
+	if cfg.FilterSettings.EnableTrace {
+		manager.config.EnableTrace = true
+		manager.config.TraceBufferSize = cfg.FilterSettings.TraceBufferSize
+	}
+	
+	return manager
+}
+
+// RecordDegradedURL 记录降级的URL（v4.2新增）
+func (s *Spider) RecordDegradedURL(url string, reason string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.degradedURLs = append(s.degradedURLs, url)
+	
+	s.logger.Debug("URL降级",
+		"url", url,
+		"reason", reason)
+}
+
+// GetDegradedURLs 获取降级的URL列表（v4.2新增）
+func (s *Spider) GetDegradedURLs() []string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.degradedURLs
+}
+
 // PrintURLFilterReport 打印URL过滤统计报告（v3.5新增）
 func (s *Spider) PrintURLFilterReport() {
+	// 🆕 v4.2: 如果使用新的过滤管理器，打印其统计
+	if s.filterManager != nil {
+		s.filterManager.PrintStatistics()
+		
+		// 打印降级URL统计
+		if len(s.degradedURLs) > 0 {
+			fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+			fmt.Printf("📊 降级URL统计\n")
+			fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+			fmt.Printf("  总降级URL: %d\n", len(s.degradedURLs))
+			fmt.Printf("  说明: 这些URL已被记录但未发送HTTP请求\n")
+			fmt.Printf("  包括: 静态资源、外部链接等\n")
+			fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+		}
+		return
+	}
+	
+	// 降级到旧的验证器
 	if s.urlValidator == nil {
 		return
 	}
@@ -2608,18 +2774,36 @@ func (s *Spider) addLinkWithFilterToResult(result *Result, base *url.URL, rawURL
 
     added := false
     for _, u := range normalized {
-        // 质量过滤
-        if s.urlQualityFilter != nil {
-            if valid, _ := s.urlQualityFilter.IsHighQualityURL(u); !valid {
+        // 🆕 v4.2: 使用统一的过滤管理器（如果启用）
+        if s.filterManager != nil && s.config.FilterSettings.Enabled {
+            filterResult := s.filterManager.Filter(u, map[string]interface{}{
+                "source_type": "cross_domain_js",
+                "method":      "GET",
+            })
+            
+            // 只允许Action为Allow的URL
+            if !filterResult.Allowed || filterResult.Action != FilterAllow {
+                if filterResult.Action == FilterDegrade {
+                    s.RecordDegradedURL(u, filterResult.Reason)
+                }
                 continue
             }
-        }
-        // 业务URL验证
-        if s.urlValidator != nil {
-            if !s.urlValidator.IsValidBusinessURL(u) {
-                continue
+        } else {
+            // 降级到旧的过滤逻辑（向后兼容）
+            // 质量过滤
+            if s.urlQualityFilter != nil {
+                if valid, _ := s.urlQualityFilter.IsHighQualityURL(u); !valid {
+                    continue
+                }
+            }
+            // 业务URL验证
+            if s.urlValidator != nil {
+                if !s.urlValidator.IsValidBusinessURL(u) {
+                    continue
+                }
             }
         }
+        
         // 去重
         exists := false
         for _, existing := range result.Links {

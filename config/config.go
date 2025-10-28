@@ -44,6 +44,9 @@ type Config struct {
 	SchedulingSettings SchedulingSettings `json:"scheduling_settings"` // 调度策略设置
 	AdvancedSettings   AdvancedSettings   `json:"advanced_settings"`   // 高级功能设置
 	OutputAdvanced     OutputAdvanced     `json:"output_advanced"`     // 输出增强配置
+	
+	// 🆕 v4.2 新增功能：统一URL过滤管理器
+	FilterSettings     FilterSettings     `json:"filter_settings"`     // URL过滤设置
 }
 
 // DepthSettings 爬取深度设置
@@ -440,6 +443,38 @@ type CustomPattern struct {
 	Mask     bool   // 是否需要脱敏
 }
 
+// FilterSettings URL过滤设置（v4.2新增）
+type FilterSettings struct {
+	// 是否启用新的过滤管理器
+	Enabled bool `json:"enabled"`
+	
+	// 预设模式: strict/balanced/loose/api_only/deep_scan
+	Preset string `json:"preset"`
+	
+	// 过滤模式: strict/balanced/loose
+	Mode string `json:"mode"`
+	
+	// 性能优化
+	EnableCaching   bool `json:"enable_caching"`
+	CacheSize       int  `json:"cache_size"`
+	EnableEarlyStop bool `json:"enable_early_stop"`
+	
+	// 调试
+	EnableTrace     bool `json:"enable_trace"`
+	TraceBufferSize int  `json:"trace_buffer_size"`
+	VerboseLogging  bool `json:"verbose_logging"`
+	
+	// 外部链接处理: allow/reject/degrade
+	ExternalLinkAction string `json:"external_link_action"`
+	
+	// 静态资源处理: allow/reject/degrade
+	StaticResourceAction string `json:"static_resource_action"`
+	
+	// 业务价值评估
+	MinBusinessScore    float64 `json:"min_business_score"`
+	HighValueThreshold  float64 `json:"high_value_threshold"`
+}
+
 // NewDefaultConfig 创建默认配置（优化版 - 超越crawlergo）
 func NewDefaultConfig() *Config {
 	return &Config{
@@ -642,6 +677,23 @@ func NewDefaultConfig() *Config {
 			SaveBusinessValueAnalysis: true,  // 保存业务价值分析
 			EnableRealtimeDashboard:   false, // 实时仪表板（默认关闭）
 			DashboardPort:             8080,  // 仪表板端口
+		},
+		
+		// 🆕 v4.2: 统一URL过滤管理器默认配置
+		FilterSettings: FilterSettings{
+			Enabled:              true,      // 启用新的过滤管理器
+			Preset:               "balanced", // 默认平衡模式
+			Mode:                 "balanced",
+			EnableCaching:        true,
+			CacheSize:            10000,
+			EnableEarlyStop:      true,
+			EnableTrace:          false,
+			TraceBufferSize:      100,
+			VerboseLogging:       false,
+			ExternalLinkAction:   "degrade", // 外部链接降级（记录但不爬取）
+			StaticResourceAction: "degrade", // 静态资源降级
+			MinBusinessScore:     30.0,
+			HighValueThreshold:   70.0,
 		},
 	}
 }
