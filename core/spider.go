@@ -99,6 +99,12 @@ type Spider struct {
 	
 	// 🆕 v4.2: 统一URL过滤管理器
 	filterManager      *URLFilterManager         // 统一的URL过滤管理器
+	
+	// 🆕 v4.3: 性能优化组件
+	businessFilterV2   *BusinessAwareURLFilterV2  // 优化版业务过滤器(分片锁)
+	hybridDedup        *HybridDeduplicator        // 混合去重器(Bloom+LRU)
+	perfStats          *PerformanceStats          // 性能统计
+	enableOptimizations bool                      // 是否启用性能优化
 
 	results           []*Result
 	degradedURLs      []string         // 降级的URL（记录但不爬取）
@@ -248,6 +254,36 @@ func NewSpider(cfg *config.Config) *Spider {
 	// 🆕 v4.2: 初始化统一URL过滤管理器
 	// 注意：targetDomain在Start()时才设置，这里先不初始化
 	// 过滤管理器将在Start()时延迟初始化
+	
+	// 🆕 v4.3: 初始化性能优化组件
+	spider.enableOptimizations = cfg.EnablePerformanceOptimizations
+	if spider.enableOptimizations {
+		// 初始化性能统计
+		spider.perfStats = &PerformanceStats{}
+		
+		// 初始化优化版业务过滤器(分片锁)
+		if cfg.DeduplicationSettings.EnableBusinessAwareFilter {
+			businessConfig := BusinessFilterConfig{
+				MinBusinessScore:        cfg.DeduplicationSettings.BusinessFilterMinScore,
+				HighValueThreshold:      cfg.DeduplicationSettings.BusinessFilterHighValueThreshold,
+				MaxSamePatternLowValue:  2,  // 默认值
+				MaxSamePatternMidValue:  5,  // 默认值
+				MaxSamePatternHighValue: 20, // 默认值
+				EnableAdaptiveLearning:  false,
+				LearningRate:            0.1,
+				Enabled:                 true,
+			}
+			spider.businessFilterV2 = NewBusinessAwareURLFilterV2(businessConfig)
+			logger.Info("启用优化版业务过滤器", "shards", 32)
+		}
+		
+		// 初始化混合去重器(Bloom Filter + LRU)
+		spider.hybridDedup = NewHybridDeduplicator(10000000, 10000)
+		logger.Info("启用混合去重器", 
+			"bloom_capacity", 10000000,
+			"lru_size", 10000,
+			"estimated_memory_mb", 16)
+	}
 	
 	// 配置各个组件
 	spider.staticCrawler.Configure(cfg)
@@ -1554,6 +1590,16 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 	skippedByLoginWall := 0 // 🆕 v3.2 统计登录墙跳过的数量
 	
 	for link := range allLinks {
+		// 🆕 v4.3: 使用优化的上下文 (URL只解析一次)
+		var ctx *OptimizedFilterContext
+		if s.enableOptimizations {
+			ctx = AcquireFilterContext(link)
+			ctx.Depth = targetDepth
+			ctx.Method = "GET"
+			ctx.SourceType = "html"
+			ctx.CustomData["target_domain"] = s.targetDomain
+		}
+		
 		// 🆕 v4.2: 使用统一的过滤管理器（如果启用）
 		if s.filterManager != nil && s.config.FilterSettings.Enabled {
 			// 统一过滤入口
@@ -1580,9 +1626,26 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 				continue
 			}
 			
-			// 基础去重检查（仍然需要）
-			if s.duplicateHandler.IsDuplicateURL(link) {
+			// 基础去重检查
+			if s.enableOptimizations && s.hybridDedup != nil {
+				// 使用优化的混合去重器
+				isDup, _ := s.hybridDedup.IsDuplicate(link)
+				if isDup {
+					if ctx != nil {
+						ReleaseFilterContext(ctx)
+					}
+					continue
+				}
+			} else if s.duplicateHandler.IsDuplicateURL(link) {
+				if ctx != nil {
+					ReleaseFilterContext(ctx)
+				}
 				continue
+			}
+			
+			// 释放上下文
+			if ctx != nil {
+				ReleaseFilterContext(ctx)
 			}
 			
 		} else {
@@ -1668,9 +1731,22 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 				}
 			}
 
-			// v2.7: 业务感知过滤检查
+			// v2.7: 业务感知过滤检查 (使用优化版本)
 			if s.config.DeduplicationSettings.EnableBusinessAwareFilter {
-				shouldCrawl, reason, score := s.businessFilter.ShouldCrawlURL(link)
+				var shouldCrawl bool
+				var reason string
+				var score float64
+				
+				if s.enableOptimizations && s.businessFilterV2 != nil {
+					// 使用优化版本 (分片锁)
+					shouldCrawl, reason, score = s.businessFilterV2.ShouldCrawlURL(link)
+				} else if s.businessFilter != nil {
+					// 使用旧版本
+					shouldCrawl, reason, score = s.businessFilter.ShouldCrawlURL(link)
+				} else {
+					shouldCrawl = true
+				}
+				
 				if !shouldCrawl {
 					skippedByBusiness++
 					if skippedByBusiness <= 5 { // 只打印前5个，避免日志过多
@@ -1678,6 +1754,9 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 							"url", link,
 							"reason", reason,
 							"score", score)
+					}
+					if ctx != nil {
+						ReleaseFilterContext(ctx)
 					}
 					continue
 				}

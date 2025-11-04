@@ -47,6 +47,9 @@ type Config struct {
 	
 	// 🆕 v4.2 新增功能：统一URL过滤管理器
 	FilterSettings     FilterSettings     `json:"filter_settings"`     // URL过滤设置
+	
+	// 🆕 v4.3: 性能优化开关
+	EnablePerformanceOptimizations bool `json:"enable_performance_optimizations"` // 启用性能优化(URL解析缓存+分片锁+混合去重)
 }
 
 // DepthSettings 爬取深度设置
