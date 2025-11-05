@@ -23,104 +23,42 @@ import (
 // printUsage 打印自定义的帮助信息
 func printUsage() {
 	fmt.Fprintf(os.Stderr, `
-╔════════════════════════════════════════════════════════════════╗
-║            GogoSpider v3.3 - 智能Web爬虫工具                   ║
-║                   简洁命令行指南                               ║
-╚════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════╗
+║         GogoSpider v3.3 - 智能Web爬虫工具                 ║
+╚═══════════════════════════════════════════════════════════╝
 
 📖 使用方法:
-  spider [选项]
-  spider -config <配置文件>          # 推荐：使用配置文件
+  spider -url <URL>              # 单URL扫描
+  spider -config <配置文件>      # 使用配置文件（推荐）
+  spider -batch-file <文件>      # 批量扫描
 
-═══════════════════════════════════════════════════════════════
+🎯 核心参数:
+  -url string          目标URL（单URL扫描）
+  -batch-file string   批量URL文件（每行一个URL）
+  -config string       配置文件路径（推荐使用）
+  -version             显示版本信息
 
-🎯 核心参数（必选其一）:
+⚙️ 常用参数:
+  -depth int           最大爬取深度 (默认: 3)
+  -proxy string        代理服务器 (如: http://127.0.0.1:8080)
+  -log-level string    日志级别: debug/info/warn/error (默认: info)
+  -sensitive-rules     敏感信息规则文件 (默认: sensitive_rules.json)
 
-  -url string
-        目标URL（单URL扫描模式）
-  
-  -batch-file string
-        批量URL文件（批量扫描模式，每行一个URL）
-        支持配置文件: -batch-file targets.txt -config my_config.json
-  
-  -config string
-        配置文件路径（推荐使用，包含所有详细配置）
-        示例: spider -config config.json
+📋 配置文件功能:
+  • Cookie认证          → anti_detection_settings.cookie_file
+  • HTTPS证书跳过       → anti_detection_settings.insecure_skip_verify
+  • 静态资源过滤        → scope_settings.exclude_extensions
+  • 黑名单设置          → blacklist_settings.domains
+  • 速率控制            → rate_limit_settings
+  • 敏感信息检测        → sensitive_detection_settings
+  • 更多配置...         → 查看 config.json
 
-  -version
-        显示版本信息
+🚀 快速示例:
+  spider -url https://example.com
+  spider -config config.json
+  spider -batch-file targets.txt -config my_config.json
 
-═══════════════════════════════════════════════════════════════
-
-⚙️  常用参数（可选，会覆盖配置文件）:
-
-  -depth int
-        最大爬取深度 (默认: 3)
-  
-  -proxy string
-        代理服务器 (如: http://127.0.0.1:8080)
-  
-  -log-level string
-        日志级别: debug/info/warn/error (默认: info)
-
-═══════════════════════════════════════════════════════════════
-
-📋 更多配置请使用配置文件:
-
-  🔹 Cookie认证      → anti_detection_settings.cookie_file
-  🔹 HTTPS证书      → anti_detection_settings.insecure_skip_verify
-  🔹 静态文件过滤    → scope_settings.exclude_extensions
-  🔹 黑名单设置      → blacklist_settings.domains
-  🔹 速率控制        → rate_limit_settings
-  🔹 敏感信息检测    → sensitive_detection_settings
-  🔹 ...更多配置     → 查看 config.json
-
-💡 提示: 配置文件更强大、更易维护！
-
-═══════════════════════════════════════════════════════════════
-
-🚀 快速开始:
-
-  1️⃣  最简单的使用（单URL）:
-     spider -url https://example.com
-
-  2️⃣  使用配置文件（推荐）:
-     spider -config config.json
-
-  3️⃣  批量扫描（支持配置文件）:
-     spider -batch-file targets.txt -config my_config.json
-
-  4️⃣  带Cookie认证（配置文件中设置）:
-     # 在配置文件中添加:
-     # "cookie_file": "cookies.json"
-     spider -config config_with_cookie.json
-
-  5️⃣  忽略HTTPS证书错误（配置文件中设置）:
-     # 在配置文件中添加:
-     # "insecure_skip_verify": true
-     spider -config config_insecure.json
-
-═══════════════════════════════════════════════════════════════
-
-📚 详细文档:
-
-  📄 配置文件示例:  config.json（开箱即用）
-  📄 配置指南:      CONFIG_GUIDE.md
-  📄 快速迁移:      快速迁移指南_v3.3.md
-  📄 更新日志:      CHANGELOG_v3.3.md
-  📄 项目主页:      https://github.com/Warren-Jace/gogospider
-
-═══════════════════════════════════════════════════════════════
-
-💬 核心理念:
-  
-  ✅ 命令行 = 快速简单
-  ✅ 配置文件 = 完整强大
-  ✅ 二者结合 = 灵活高效
-
-  推荐做法: 为不同场景准备不同的配置文件！
-
-═══════════════════════════════════════════════════════════════
+💡 提示: 配置文件功能更完整，推荐使用！
 
 `)
 }
@@ -205,6 +143,9 @@ var (
 	// 🆕 v2.11: 批量扫描参数
 	batchFile               string // 批量URL文件
 	batchConcurrency        int    // 批量扫描并发数
+	
+	// 🆕 v4.4: 请求日志参数
+	enableRequestLogging    bool   // 是否启用请求日志记录
 	
 	// ✅ 修复2: cookieString变量已移除,改用配置文件
 )
@@ -293,6 +234,9 @@ func init() {
 	flag.StringVar(&batchFile, "batch-file", "", "批量扫描URL列表文件（每行一个URL）")
 	flag.IntVar(&batchConcurrency, "batch-concurrency", 5, "批量扫描并发数（默认5）")
 	
+	// 🆕 v4.4: 请求日志参数
+	flag.BoolVar(&enableRequestLogging, "enable-request-logging", false, "启用请求日志记录（用于调试优化）")
+	
 	// ✅ 修复2: Cookie字符串参数已移除,请在配置文件中配置 anti_detection_settings.cookie_string
 }
 
@@ -340,22 +284,38 @@ func main() {
 		printBanner()
 	}
 
-	// 🔧 优化：加载配置（支持配置文件）
+	// 🔧 优化：加载配置（默认使用config.json）
 	var cfg *config.Config
 	
-	if configFile != "" {
-		// 从配置文件加载
-		loadedCfg, err := loadConfigFile(configFile)
+	// 确定配置文件路径
+	configPath := configFile
+	if configPath == "" {
+		// 🆕 v4.0: 默认使用 config.json（如果存在）
+		configPath = "config.json"
+	}
+	
+	// 尝试加载配置文件
+	if _, err := os.Stat(configPath); err == nil {
+		// 配置文件存在，加载它
+		loadedCfg, err := loadConfigFile(configPath)
 		if err != nil {
 			log.Fatalf("加载配置文件失败: %v", err)
 		}
 		cfg = loadedCfg
 		if !simpleMode {
-			fmt.Printf("[*] 已加载配置文件: %s\n", configFile)
+			fmt.Printf("[*] 已加载配置文件: %s\n", configPath)
 		}
 	} else {
-		// 使用默认配置
+		// 配置文件不存在
+		if configFile != "" {
+			// 用户显式指定了配置文件但不存在，报错
+			log.Fatalf("指定的配置文件不存在: %s", configFile)
+		}
+		// 使用硬编码默认配置（向下兼容）
 		cfg = config.NewDefaultConfig()
+		if !simpleMode {
+			fmt.Println("[*] 使用默认配置（建议创建 config.json 文件）")
+		}
 	}
 
 	// 命令行参数覆盖配置文件
@@ -487,6 +447,11 @@ func main() {
 	cfg.SensitiveDetectionSettings.MinSeverity = strings.ToUpper(sensitiveMinSeverity)
 	cfg.SensitiveDetectionSettings.OutputFile = sensitiveOutputFile
 	cfg.SensitiveDetectionSettings.RealTimeOutput = sensitiveRealTime
+	
+	// 🆕 v4.4: 请求日志配置
+	if enableRequestLogging {
+		cfg.EnableRequestLogging = true
+	}
 
 	// 参数验证已在上方完成（批量扫描和URL二选一）
 	
@@ -535,15 +500,13 @@ func main() {
 		if rulesFile != "" {
 			if err := spider.MergeSensitiveRules(rulesFile); err != nil {
 				fmt.Printf("⚠️  警告: 加载敏感规则失败: %v\n", err)
-				fmt.Printf("💡 提示: 请使用 -sensitive-rules 参数指定规则文件，或确保默认文件存在\n")
-				fmt.Printf("    推荐: -sensitive-rules sensitive_rules_standard.json\n")
+				fmt.Printf("💡 提示: 请使用 -sensitive-rules 参数指定规则文件，或确保默认文件 'sensitive_rules.json' 存在\n")
 			} else {
 				fmt.Printf("✅ 已加载敏感信息规则文件: %s\n", rulesFile)
 			}
 		} else {
 			fmt.Printf("⚠️  警告: 敏感信息检测已启用，但未指定规则文件\n")
-			fmt.Printf("💡 请使用 -sensitive-rules 参数指定规则文件\n")
-			fmt.Printf("    示例: -sensitive-rules sensitive_rules_standard.json\n")
+			fmt.Printf("💡 请使用 -sensitive-rules 参数指定规则文件，默认: sensitive_rules.json\n")
 		}
 	}
 
@@ -606,9 +569,29 @@ func main() {
 		}
 	}
 	
+	// 🆕 v4.4: 保存请求日志（如果启用）
+	if cfg.EnableRequestLogging {
+		// 保存文本格式的请求日志
+		requestLogFile := baseFilename + "_requests.txt"
+		if err := spider.SaveRequestLogsToFile(requestLogFile); err != nil {
+			log.Printf("保存请求日志失败: %v", err)
+		}
+		
+		// 保存JSON格式的请求日志
+		requestLogJSON := baseFilename + "_requests.json"
+		if err := spider.SaveRequestLogsToJSON(requestLogJSON); err != nil {
+			log.Printf("保存请求日志JSON失败: %v", err)
+		}
+	}
+	
 	// 打印统计信息
 	if !simpleMode {
 		printStats(results, elapsed)
+		
+		// 🆕 v4.4: 打印请求日志统计（如果启用）
+		if cfg.EnableRequestLogging {
+			spider.PrintRequestLogsSummary()
+		}
 		
 		// 🆕 v3.2: 打印重定向检测报告
 		spider.PrintRedirectReport()
@@ -636,6 +619,9 @@ func main() {
 		
 		// 🆕 v3.6: 打印分层去重统计报告（最终报告）
 		spider.PrintFinalLayeredStats()
+		
+		// 🆕 v4.5: 打印URL模式+DOM去重报告
+		spider.PrintURLPatternDOMDedupReport()
 		
 		fmt.Printf("\n[+] 结果已保存到当前目录\n")
 	}
@@ -687,20 +673,21 @@ func isInTargetDomain(urlStr, targetDomain string) bool {
 		return false
 	}
 	
-	// 获取URL的域名（使用Hostname()自动去除端口）
-	urlHost := parsedURL.Hostname()
+	// 获取URL的域名和端口
+	urlHost := parsedURL.Host // 包含端口（如果有）
 	if urlHost == "" {
 		// 相对路径URL，视为目标域名
 		return true
 	}
 	
-	// 清理目标域名（去除协议和端口）
+	// 🔧 修复：清理目标域名（去除协议，但保留端口）
 	cleanTarget := strings.TrimPrefix(targetDomain, "http://")
 	cleanTarget = strings.TrimPrefix(cleanTarget, "https://")
-	cleanTarget = strings.Split(cleanTarget, ":")[0]
-	cleanTarget = strings.ReplaceAll(cleanTarget, "_", ":")  // extractDomain会替换冒号
+	cleanTarget = strings.TrimSuffix(cleanTarget, "/")
+	// extractDomain会将冒号替换为下划线，需要还原
+	cleanTarget = strings.ReplaceAll(cleanTarget, "_", ":")
 	
-	// 完全匹配
+	// 完全匹配（包括端口）
 	if urlHost == cleanTarget {
 		return true
 	}

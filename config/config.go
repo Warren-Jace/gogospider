@@ -50,6 +50,9 @@ type Config struct {
 	
 	// 🆕 v4.3: 性能优化开关
 	EnablePerformanceOptimizations bool `json:"enable_performance_optimizations"` // 启用性能优化(URL解析缓存+分片锁+混合去重)
+	
+	// 🆕 v4.4: 请求日志开关
+	EnableRequestLogging bool `json:"enable_request_logging"` // 启用请求日志记录(用于调试优化)
 }
 
 // DepthSettings 爬取深度设置
@@ -185,51 +188,60 @@ type AntiDetectionSettings struct {
 // DeduplicationSettings 去重设置
 type DeduplicationSettings struct {
 	// 相似度阈值
-	SimilarityThreshold float64
+	SimilarityThreshold float64 `json:"similarity_threshold"`
 
 	// 是否启用DOM相似度去重
-	EnableDOMDeduplication bool
+	EnableDOMDeduplication bool `json:"enable_dom_deduplication"`
 
 	// 是否启用URL模式识别
-	EnableURLPatternRecognition bool
+	EnableURLPatternRecognition bool `json:"enable_url_pattern_recognition"`
 
 	// 是否启用智能参数值去重（v2.6.1 新增）
-	EnableSmartParamDedup bool
+	EnableSmartParamDedup bool `json:"enable_smart_param_dedup"`
 
 	// 每个参数值特征组最多爬取数量（v2.6.1 新增）
-	MaxParamValueVariantsPerGroup int
+	MaxParamValueVariantsPerGroup int `json:"max_param_value_variants_per_group"`
+	
+	// 🆕 v4.5: 是否启用URL模式+DOM相似度去重（更精准的去重策略）
+	EnableURLPatternDOMDedup bool `json:"enable_url_pattern_dom_dedup"`
+	
+	// 🆕 v4.5: URL模式采样次数（默认3次）
+	URLPatternDOMSampleCount int `json:"url_pattern_dom_sample_count"`
+	
+	// 🆕 v4.5: URL模式DOM相似度阈值（默认0.85）
+	URLPatternDOMThreshold float64 `json:"url_pattern_dom_threshold"`
 	
 	// 是否启用业务感知过滤（v2.7 新增）
-	EnableBusinessAwareFilter bool
+	EnableBusinessAwareFilter bool `json:"enable_business_aware_filter"`
 	
 	// 业务感知过滤配置（v2.7 新增）
-	BusinessFilterMinScore        float64 // 最低业务分数 (0-100)
-	BusinessFilterHighValueThreshold float64 // 高价值URL阈值
-	BusinessFilterMaxLowValue     int     // 低价值URL同模式最大数量
-	BusinessFilterMaxMidValue     int     // 中等价值URL同模式最大数量
-	BusinessFilterMaxHighValue    int     // 高价值URL同模式最大数量
-	BusinessFilterAdaptiveLearning bool   // 是否启用自适应学习
+	BusinessFilterMinScore        float64 `json:"business_filter_min_score"` // 最低业务分数 (0-100)
+	BusinessFilterHighValueThreshold float64 `json:"business_filter_high_value_threshold"` // 高价值URL阈值
+	BusinessFilterMaxLowValue     int     `json:"business_filter_max_low_value"` // 低价值URL同模式最大数量
+	BusinessFilterMaxMidValue     int     `json:"business_filter_max_mid_value"` // 中等价值URL同模式最大数量
+	BusinessFilterMaxHighValue    int     `json:"business_filter_max_high_value"` // 高价值URL同模式最大数量
+	BusinessFilterAdaptiveLearning bool   `json:"business_filter_adaptive_learning"` // 是否启用自适应学习
 	
 	// 智能参数验证（v2.8 新增）
-	EnableParamValidation      bool    // 是否启用参数验证
-	ParamValidationSimilarity  float64 // 响应相似度阈值 (0-1)
-	ParamValidationMaxSimilar  int     // 最大相同响应次数
-	ParamValidationMinDiff     int     // 最小响应差异（字节）
+	EnableParamValidation      bool    `json:"enable_param_validation"` // 是否启用参数验证
+	ParamValidationSimilarity  float64 `json:"param_validation_similarity"` // 响应相似度阈值 (0-1)
+	ParamValidationMaxSimilar  int     `json:"param_validation_max_similar"` // 最大相同响应次数
+	ParamValidationMinDiff     int     `json:"param_validation_min_diff"` // 最小响应差异（字节）
 }
 
 // LogSettings 日志设置（v2.6 新增）
 type LogSettings struct {
 	// 日志级别: DEBUG, INFO, WARN, ERROR
-	Level string
+	Level string `json:"level"`
 
 	// 日志文件路径，空表示 stdout
-	OutputFile string
+	OutputFile string `json:"output_file"`
 
 	// 日志格式: json, text
-	Format string
+	Format string `json:"format"`
 
 	// 是否显示实时指标
-	ShowMetrics bool
+	ShowMetrics bool `json:"show_metrics"`
 }
 
 // OutputSettings 输出设置（v2.9 新增）
@@ -300,43 +312,43 @@ type ExternalSourceSettings struct {
 // ScopeSettings Scope设置（v2.9 新增）
 type ScopeSettings struct {
 	// 是否启用Scope控制
-	Enabled bool
+	Enabled bool `json:"enabled"`
 	
 	// 包含的域名
-	IncludeDomains []string
+	IncludeDomains []string `json:"include_domains"`
 	
 	// 排除的域名
-	ExcludeDomains []string
+	ExcludeDomains []string `json:"exclude_domains"`
 	
 	// 包含的路径模式
-	IncludePaths []string
+	IncludePaths []string `json:"include_paths"`
 	
 	// 排除的路径模式
-	ExcludePaths []string
+	ExcludePaths []string `json:"exclude_paths"`
 	
 	// 包含的URL正则
-	IncludeRegex string
+	IncludeRegex string `json:"include_regex"`
 	
 	// 排除的URL正则
-	ExcludeRegex string
+	ExcludeRegex string `json:"exclude_regex"`
 	
 	// 包含的文件扩展名
-	IncludeExtensions []string
+	IncludeExtensions []string `json:"include_extensions"`
 	
 	// 排除的文件扩展名
-	ExcludeExtensions []string
+	ExcludeExtensions []string `json:"exclude_extensions"`
 	
 	// 允许子域名
-	AllowSubdomains bool
+	AllowSubdomains bool `json:"allow_subdomains"`
 	
 	// 限制在同一域名内
-	StayInDomain bool
+	StayInDomain bool `json:"stay_in_domain"`
 	
 	// 允许HTTP
-	AllowHTTP bool
+	AllowHTTP bool `json:"allow_http"`
 	
 	// 允许HTTPS
-	AllowHTTPS bool
+	AllowHTTPS bool `json:"allow_https"`
 }
 
 // PipelineSettings 管道模式设置（v2.9 新增）
@@ -363,37 +375,37 @@ type PipelineSettings struct {
 // SensitiveDetectionSettings 敏感信息检测设置（v2.10 新增）
 type SensitiveDetectionSettings struct {
 	// 是否启用敏感信息检测
-	Enabled bool
+	Enabled bool `json:"enabled"`
 	
 	// 是否扫描HTTP响应体
-	ScanResponseBody bool
+	ScanResponseBody bool `json:"scan_response_body"`
 	
 	// 是否扫描HTTP响应头
-	ScanResponseHeaders bool
+	ScanResponseHeaders bool `json:"scan_response_headers"`
 	
 	// 最低严重级别: LOW, MEDIUM, HIGH
-	MinSeverity string
+	MinSeverity string `json:"min_severity"`
 	
 	// 是否启用自定义模式
-	EnableCustomPatterns bool
+	EnableCustomPatterns bool `json:"enable_custom_patterns"`
 	
 	// 自定义检测模式列表（正则表达式）
-	CustomPatterns []CustomPattern
+	CustomPatterns []CustomPattern `json:"custom_patterns"`
 	
 	// 是否保存完整敏感值（默认false，只保存脱敏值）
-	SaveFullValue bool
+	SaveFullValue bool `json:"save_full_value"`
 	
 	// 敏感信息输出文件（为空则只在内存中保存）
-	OutputFile string
+	OutputFile string `json:"output_file"`
 	
 	// 是否实时输出敏感信息发现
-	RealTimeOutput bool
+	RealTimeOutput bool `json:"realtime_output"`
 	
 	// 排除的URL模式（不检测这些URL）
-	ExcludeURLPatterns []string
+	ExcludeURLPatterns []string `json:"exclude_url_patterns"`
 	
 	// 敏感信息规则文件路径
-	RulesFile string
+	RulesFile string `json:"rules_file"`
 }
 
 // BlacklistSettings 黑名单设置（v3.0 新增）
@@ -516,6 +528,11 @@ func NewDefaultConfig() *Config {
 			EnableSmartParamDedup:         true, // 启用智能参数值去重（v2.6.1）
 			MaxParamValueVariantsPerGroup: 3,    // 每种特征最多爬取3个（v2.6.1）
 			
+			// 🆕 v4.5: URL模式+DOM相似度去重配置
+			EnableURLPatternDOMDedup:     true,  // 启用URL模式+DOM去重（更精准）
+			URLPatternDOMSampleCount:     3,     // 采样3次验证
+			URLPatternDOMThreshold:       0.85,  // DOM相似度阈值85%
+			
 			// 业务感知过滤配置（v2.7 新增）
 			EnableBusinessAwareFilter:        true,  // 启用业务感知过滤
 			BusinessFilterMinScore:           30.0,  // 最低分数30
@@ -614,7 +631,7 @@ func NewDefaultConfig() *Config {
 			OutputFile:           "",     // 默认不单独保存（包含在总报告中）
 			RealTimeOutput:       true,   // 实时输出敏感信息发现
 			ExcludeURLPatterns:   []string{}, // 默认不排除任何URL
-			RulesFile:            "./sensitive_rules_config.json", // 默认规则文件
+			RulesFile:            "sensitive_rules.json", // 默认规则文件
 		},
 		
 		// 🆕 v3.0: 黑名单默认配置

@@ -1,0 +1,624 @@
+{
+  "description": "GogoSpider 增强规则集 - 集成 RExpository 高价值规则",
+  "version": "4.0",
+  "rules": {
+    "AWS AppSync GraphQL Key": {
+      "pattern": "da2-[a-z0-9]{26}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - AWS AppSync GraphQL Key"
+    },
+    "AWS MWS Key": {
+      "pattern": "amzn\\.mws\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - AWS MWS Key"
+    },
+    "AWS S3 Access Key": {
+      "pattern": "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "AWS Access Key ID - 可能泄露S3存储桶访问权限"
+    },
+    "AWS S3 Bucket": {
+      "pattern": "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\\.s3[.-][a-z0-9-]*\\.amazonaws\\.com",
+      "severity": "MEDIUM",
+      "mask": false,
+      "description": "AWS S3存储桶域名"
+    },
+    "AWS S3 Secret Key": {
+      "pattern": "(?i)(aws_secret|aws.{0,20}secret)['\"]?\\s*[:=]\\s*['\"]?([0-9a-zA-Z/+]{40})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "AWS Secret Access Key - 严重泄露风险"
+    },
+    "Age Secret Key": {
+      "pattern": "AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Age Secret Key"
+    },
+    "Airtable API Key": {
+      "pattern": "[\"']?air[-_]?table[-_]?api[-_]?key[\"']?[=:][\"']?.+[\"']\"\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Airtable API Key"
+    },
+    "Alibaba Access Key ID": {
+      "pattern": "(?i)(LTAI)[a-z0-9]{20}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Alibaba Access Key ID"
+    },
+    "Alibaba Secret Key": {
+      "pattern": "(?i)(alibaba[a-z0-9_ \\.,\\-]{0,25})(=|\u003e|:=|\\|\\|:|\u003c=|=\u003e|:).{0,5}['\"]([a-z0-9]{30})['\"]\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Alibaba Secret Key"
+    },
+    "Asana Client ID": {
+      "pattern": "(?i)((asana[a-z0-9_ \\.,\\-]{0,25})(=|\u003e|:=|\\|\\|:|\u003c=|=\u003e|:).{0,5}['\"]([0-9]{16})['\"])|((asana[a-z0-9_ \\.,\\-]{0,25})(=|\u003e|:=|\\|\\|:|\u003c=|=\u003e|:).{0,5}['\"]([a-z0-9]{32})['\"])\n",
+      "severity": "LOW",
+      "mask": false,
+      "description": "[REx] APIs - Asana Client ID"
+    },
+    "Atlassian API Key": {
+      "pattern": "(?i)(atlassian[a-z0-9_ \\.,\\-]{0,25})(=|\u003e|:=|\\|\\|:|\u003c=|=\u003e|:).{0,5}['\"]([a-z0-9]{24})['\"]\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Atlassian API Key"
+    },
+    "Authorization Token": {
+      "pattern": "(?i)(authorization|auth[_-]?token)['\"]?\\s*[:=]\\s*['\"]?([a-zA-Z0-9_\\-\\.]{20,})",
+      "severity": "MEDIUM",
+      "mask": true,
+      "description": "Authorization Token"
+    },
+    "Basic Auth Credentials": {
+      "pattern": "://[a-zA-Z0-9]+:[a-zA-Z0-9]+@[a-zA-Z0-9]+\\.[a-zA-Z]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Basic Auth Credentials"
+    },
+    "Clojars API Key": {
+      "pattern": "(CLOJARS_)[a-zA-Z0-9]{60}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Clojars API Key"
+    },
+    "Cloudinary Basic Auth": {
+      "pattern": "cloudinary://[0-9]{15}:[0-9A-Za-z]+@[a-z]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Cloudinary Basic Auth"
+    },
+    "Databricks API Key": {
+      "pattern": "dapi[a-h0-9]{32}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Databricks API Key"
+    },
+    "Discord API Key, Client ID \u0026 Client Secret": {
+      "pattern": "(?i)((discord[a-z0-9_ \\.,\\-]{0,25})(=|\u003e|:=|\\|\\|:|\u003c=|=\u003e|:).{0,5}['\"]([a-h0-9]{64}|[0-9]{18}|[a-z0-9=_\\-]{32})['\"])\n",
+      "severity": "HIGH",
+      "mask": false,
+      "description": "[REx] APIs - Discord API Key, Client ID \u0026 Client Secret"
+    },
+    "Doppler API Key": {
+      "pattern": "(dp\\.pt\\.)[a-zA-Z0-9]{43}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Doppler API Key"
+    },
+    "Dropbox API Key": {
+      "pattern": "sl.[a-zA-Z0-9_-]{136}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Dropbox API Key"
+    },
+    "Duffel API Key": {
+      "pattern": "duffel_(test|live)_[a-zA-Z0-9_-]{43}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Duffel API Key"
+    },
+    "Dynatrace API Key": {
+      "pattern": "dt0c01\\.[a-zA-Z0-9]{24}\\.[a-z0-9]{64}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Dynatrace API Key"
+    },
+    "EasyPost API Key": {
+      "pattern": "EZAK[a-zA-Z0-9]{54}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - EasyPost API Key"
+    },
+    "EasyPost test API Key": {
+      "pattern": "EZTK[a-zA-Z0-9]{54}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - EasyPost test API Key"
+    },
+    "Facebook Access Token": {
+      "pattern": "EAACEdEose0cBA[0-9A-Za-z]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Facebook Access Token"
+    },
+    "Facebook Client ID": {
+      "pattern": "([fF][aA][cC][eE][bB][oO][oO][kK]|[fF][bB])(.{0,20})?['\"][0-9]{13,17}",
+      "severity": "LOW",
+      "mask": false,
+      "description": "[REx] APIs - Facebook Client ID"
+    },
+    "Facebook Oauth": {
+      "pattern": "[fF][aA][cC][eE][bB][oO][oO][kK].*['|\"][0-9a-f]{32}['|\"]\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Facebook Oauth"
+    },
+    "Facebook Secret Key": {
+      "pattern": "([fF][aA][cC][eE][bB][oO][oO][kK]|[fF][bB])(.{0,20})?['\"][0-9a-f]{32}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Facebook Secret Key"
+    },
+    "Frame.io API Key": {
+      "pattern": "fio-u-[a-zA-Z0-9_=\\-]{64}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Frame.io API Key"
+    },
+    "Generic API Key": {
+      "pattern": "(?i)(api[_-]?key|apikey|api[_-]?secret)['\"]?\\s*[:=]\\s*['\"]?([a-zA-Z0-9_\\-]{20,})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "通用API Key"
+    },
+    "GitHub Fine-Grained Personal Access Token": {
+      "pattern": "github_pat_[0-9a-zA-Z_]{82}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - GitHub Fine-Grained Personal Access Token"
+    },
+    "GitHub Token": {
+      "pattern": "gh[ps]_[a-zA-Z0-9]{36}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "GitHub Personal Access Token"
+    },
+    "GitLab Pipeline Trigger Token": {
+      "pattern": "glptt-[0-9a-f]{40}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - GitLab Pipeline Trigger Token"
+    },
+    "GitLab Runner Registration Token": {
+      "pattern": "GR1348941[0-9a-zA-Z_\\-]{20}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - GitLab Runner Registration Token"
+    },
+    "Github App Token": {
+      "pattern": "(ghu|ghs)_[0-9a-zA-Z]{36}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Github App Token"
+    },
+    "Github OAuth Access Token": {
+      "pattern": "gho_[0-9a-zA-Z]{36}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Github OAuth Access Token"
+    },
+    "Github Personal Access Token": {
+      "pattern": "ghp_[0-9a-zA-Z]{36}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Github Personal Access Token"
+    },
+    "Github Refresh Token": {
+      "pattern": "ghr_[0-9a-zA-Z]{76}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Github Refresh Token"
+    },
+    "Gitlab Personal Access Token": {
+      "pattern": "glpat-[0-9a-zA-Z\\-]{20}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Gitlab Personal Access Token"
+    },
+    "Google (GCP) Service-account": {
+      "pattern": "\"type.+:.+\"service_account",
+      "severity": "MEDIUM",
+      "mask": true,
+      "description": "[REx] APIs - Google (GCP) Service-account"
+    },
+    "Google Cloud API Key": {
+      "pattern": "AIza[0-9A-Za-z\\-_]{35}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "Google Cloud API Key"
+    },
+    "Google Drive Oauth": {
+      "pattern": "[0-9]+-[0-9A-Za-z_]{32}\\.apps\\.googleusercontent\\.com",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Google Drive Oauth"
+    },
+    "Google Oauth Access Token": {
+      "pattern": "ya29\\.[0-9A-Za-z_\\-]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Google Oauth Access Token"
+    },
+    "Grafana API Key": {
+      "pattern": "(?i)eyJrIjoi[a-z0-9_=\\-]{72,92}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Grafana API Key"
+    },
+    "Grafana cloud api token": {
+      "pattern": "glc_[A-Za-z0-9\\+/]{32,}={0,2}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Grafana cloud api token"
+    },
+    "Grafana service account token": {
+      "pattern": "(glsa_[A-Za-z0-9]{32}_[A-Fa-f0-9]{8})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Grafana service account token"
+    },
+    "Hashicorp Terraform user/org API Key": {
+      "pattern": "[a-z0-9]{14}\\.atlasv1\\.[a-z0-9_=\\-]{60,70}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Hashicorp Terraform user/org API Key"
+    },
+    "Heroku API Key": {
+      "pattern": "[hH][eE][rR][oO][kK][uU].{0,30}[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Heroku API Key"
+    },
+    "JWT Token": {
+      "pattern": "eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*",
+      "severity": "MEDIUM",
+      "mask": true,
+      "description": "JWT Token"
+    },
+    "Linear API Key": {
+      "pattern": "(lin_api_[a-zA-Z0-9]{40})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Linear API Key"
+    },
+    "LinkedIn Client ID": {
+      "pattern": "linkedin(.{0,20})?['\"][0-9a-z]{12}['\"]\n",
+      "severity": "LOW",
+      "mask": false,
+      "description": "[REx] APIs - LinkedIn Client ID"
+    },
+    "LinkedIn Secret Key": {
+      "pattern": "linkedin(.{0,20})?['\"][0-9a-z]{16}['\"]\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - LinkedIn Secret Key"
+    },
+    "Mailchimp API Key": {
+      "pattern": "[0-9a-f]{32}-us[0-9]{1,2}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Mailchimp API Key"
+    },
+    "Mailgun API Key": {
+      "pattern": "key-[0-9a-zA-Z]{32}'\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Mailgun API Key"
+    },
+    "Mapbox API Key": {
+      "pattern": "(?i)(pk\\.[a-z0-9]{60}\\.[a-z0-9]{22})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Mapbox API Key"
+    },
+    "Microsoft Teams Webhook": {
+      "pattern": "https:\\/\\/[a-z0-9]+\\.webhook\\.office\\.com\\/webhookb2\\/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}@[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}\\/IncomingWebhook\\/[a-z0-9]{32}\\/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Microsoft Teams Webhook"
+    },
+    "MongoDB Connection": {
+      "pattern": "mongodb(\\+srv)?://[^:]+:[^@]+@[^/\\s]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "MongoDB连接字符串（含密码）"
+    },
+    "MySQL Connection": {
+      "pattern": "(?i)(mysql|mariadb)://[^:]+:[^@]+@[^/\\s]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "MySQL连接字符串（含密码）"
+    },
+    "Npm Access Token": {
+      "pattern": "(npm_[a-zA-Z0-9]{36})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Npm Access Token"
+    },
+    "OpenAI API Token": {
+      "pattern": "sk-[A-Za-z0-9]{48}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - OpenAI API Token"
+    },
+    "PayPal Braintree Access Token": {
+      "pattern": "access_token\\$production\\$[0-9a-z]{16}\\$[0-9a-f]{32}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - PayPal Braintree Access Token"
+    },
+    "Plaid API Token": {
+      "pattern": "(access-(?:sandbox|development|production)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Plaid API Token"
+    },
+    "PlanetScale OAuth token": {
+      "pattern": "(pscale_oauth_[a-zA-Z0-9_\\.\\-]{32,64})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - PlanetScale OAuth token"
+    },
+    "Planetscale API Key": {
+      "pattern": "pscale_tkn_[a-zA-Z0-9_\\.\\-]{43}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Planetscale API Key"
+    },
+    "Planetscale Password": {
+      "pattern": "pscale_pw_[a-zA-Z0-9_\\.\\-]{43}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Planetscale Password"
+    },
+    "PostgreSQL Connection": {
+      "pattern": "(?i)postgres(ql)?://[^:]+:[^@]+@[^/\\s]+",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "PostgreSQL连接字符串（含密码）"
+    },
+    "Postman API Key": {
+      "pattern": "PMAK-[a-fA-F0-9]{24}-[a-fA-F0-9]{34}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Postman API Key"
+    },
+    "Prefect API token": {
+      "pattern": "(pnu_[a-z0-9]{36})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Prefect API token"
+    },
+    "Pulumi API Key": {
+      "pattern": "pul-[a-f0-9]{40}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Pulumi API Key"
+    },
+    "PyPI upload token": {
+      "pattern": "pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\\-]{50,}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - PyPI upload token"
+    },
+    "QQ AppID": {
+      "pattern": "(?i)qq[_-]?app[_-]?id['\"]?\\s*[:=]\\s*['\"]?(\\d{8,12})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "QQ互联AppID"
+    },
+    "Readme API token": {
+      "pattern": "rdme_[a-z0-9]{70}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Readme API token"
+    },
+    "Redis密码": {
+      "pattern": "(?i)redis[_-]?(password|passwd|pwd|auth)['\"]?\\s*[:=]\\s*['\"]([^'\"\\s]{6,})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "Redis密码"
+    },
+    "Rubygem API Key": {
+      "pattern": "rubygems_[a-f0-9]{48}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Rubygem API Key"
+    },
+    "SSH Private Key": {
+      "pattern": "-----BEGIN ((EC|PGP|DSA|RSA|OPENSSH) )?PRIVATE KEY-----",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "SSH私钥"
+    },
+    "Sendgrid API Key": {
+      "pattern": "SG\\.[a-zA-Z0-9_\\.\\-]{66}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Sendgrid API Key"
+    },
+    "Sendinblue API Key": {
+      "pattern": "xkeysib-[a-f0-9]{64}-[a-zA-Z0-9]{16}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Sendinblue API Key"
+    },
+    "Slack Token": {
+      "pattern": "xox[pborsa]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "Slack Token"
+    },
+    "Square API Key": {
+      "pattern": "EAAAE[a-zA-Z0-9_-]{59}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Square API Key"
+    },
+    "Square Access Token": {
+      "pattern": "sqOatp-[0-9A-Za-z_\\-]{22}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Square Access Token"
+    },
+    "Stripe Live Key": {
+      "pattern": "sk_live_[0-9a-zA-Z]{24,}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "Stripe Live API Key"
+    },
+    "Telegram Bot API Token": {
+      "pattern": "[0-9]+:AA[0-9A-Za-z\\\\-_]{33}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Telegram Bot API Token"
+    },
+    "Twilio API Key": {
+      "pattern": "SK[0-9a-fA-F]{32}",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Twilio API Key"
+    },
+    "Twitter Bearer Token": {
+      "pattern": "(A{22}[a-zA-Z0-9%]{80,100})\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Twitter Bearer Token"
+    },
+    "Twitter Client ID": {
+      "pattern": "[tT][wW][iI][tT][tT][eE][rR](.{0,20})?['\"][0-9a-z]{18,25}\n",
+      "severity": "LOW",
+      "mask": false,
+      "description": "[REx] APIs - Twitter Client ID"
+    },
+    "Twitter Oauth": {
+      "pattern": "[tT][wW][iI][tT][tT][eE][rR].{0,30}['\"\\\\s][0-9a-zA-Z]{35,44}['\"\\\\s]\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Twitter Oauth"
+    },
+    "Twitter Secret Key": {
+      "pattern": "[tT][wW][iI][tT][tT][eE][rR](.{0,20})?['\"][0-9a-z]{35,44}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Twitter Secret Key"
+    },
+    "Typeform API Key": {
+      "pattern": "tfp_[a-z0-9_\\.=\\-]{59}\n",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "[REx] APIs - Typeform API Key"
+    },
+    "中国手机号": {
+      "pattern": "(?\u003c![0-9])1[3-9]\\d{9}(?![0-9])",
+      "severity": "LOW",
+      "mask": true,
+      "description": "中国手机号"
+    },
+    "中国身份证": {
+      "pattern": "[1-9]\\d{5}(18|19|20)\\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\\d{3}[0-9Xx]",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "中国身份证号"
+    },
+    "内网IP": {
+      "pattern": "(10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})|(172\\.(1[6-9]|2\\d|3[0-1])\\.\\d{1,3}\\.\\d{1,3})|(192\\.168\\.\\d{1,3}\\.\\d{1,3})",
+      "severity": "MEDIUM",
+      "mask": false,
+      "description": "内网IP地址"
+    },
+    "微信AppID": {
+      "pattern": "(?i)(wechat|weixin|wx)[_-]?app[_-]?id['\"]?\\s*[:=]\\s*['\"]?(wx[a-z0-9]{16})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "微信AppID - 第三方登录凭证"
+    },
+    "微信AppSecret": {
+      "pattern": "(?i)(wechat|weixin|wx)[_-]?app[_-]?secret['\"]?\\s*[:=]\\s*['\"]?([a-z0-9]{32})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "微信AppSecret - 严重泄露风险"
+    },
+    "微信支付密钥": {
+      "pattern": "(?i)(wechat|weixin|wx)[_-]?pay[_-]?(api[_-]?)?key['\"]?\\s*[:=]\\s*['\"]?([a-zA-Z0-9]{32})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "微信支付API密钥 - 严重泄露风险"
+    },
+    "支付宝AppID": {
+      "pattern": "(?i)alipay[_-]?app[_-]?id['\"]?\\s*[:=]\\s*['\"]?(\\d{16,20})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "支付宝App ID"
+    },
+    "支付宝私钥": {
+      "pattern": "(?i)alipay[_-]?private[_-]?key['\"]?\\s*[:=]\\s*['\"]?(MII[A-Za-z0-9+/=]{100,})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "支付宝应用私钥 - 严重泄露风险"
+    },
+    "数据库密码": {
+      "pattern": "(?i)(db|database|mysql|postgres|mongo)[_-]?(password|passwd|pwd)['\"]?\\s*[:=]\\s*['\"]([^'\"\\s]{6,})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "数据库密码"
+    },
+    "管理员密码": {
+      "pattern": "(?i)(admin|root)[_-]?(password|passwd|pwd)['\"]?\\s*[:=]\\s*['\"]([^'\"\\s]{6,})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "管理员密码"
+    },
+    "腾讯云COS SecretId": {
+      "pattern": "(?i)(tencent|qcloud|cos)[_-]?secret[_-]?(id|ID)['\"]?\\s*[:=]\\s*['\"]?(AKID[A-Za-z0-9]{32,36}|[A-Za-z0-9]{32,40})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "腾讯云COS SecretId - 存储桶访问凭证"
+    },
+    "腾讯云COS SecretKey": {
+      "pattern": "(?i)(tencent|qcloud|cos)[_-]?secret[_-]?key['\"]?\\s*[:=]\\s*['\"]?([A-Za-z0-9]{32,40})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "腾讯云COS SecretKey - 严重泄露风险"
+    },
+    "邮箱地址": {
+      "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+      "severity": "LOW",
+      "mask": false,
+      "description": "邮箱地址"
+    },
+    "阿里云OSS AccessKey": {
+      "pattern": "(?i)(aliyun|oss)[_-]?access[_-]?key[_-]?(id|ID)['\"]?\\s*[:=]\\s*['\"]?(LTAI[A-Za-z0-9]{12,20}|[A-Z0-9]{16,24})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "阿里云OSS AccessKey ID - 存储桶访问凭证"
+    },
+    "阿里云OSS Bucket": {
+      "pattern": "[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\\.oss-[a-z0-9-]+\\.aliyuncs\\.com",
+      "severity": "MEDIUM",
+      "mask": false,
+      "description": "阿里云OSS存储桶域名"
+    },
+    "阿里云OSS SecretKey": {
+      "pattern": "(?i)(aliyun|oss)[_-]?(secret|access[_-]?key[_-]?secret)['\"]?\\s*[:=]\\s*['\"]?([A-Za-z0-9]{30,40})",
+      "severity": "HIGH",
+      "mask": true,
+      "description": "阿里云OSS SecretKey - 严重泄露风险"
+    }
+  }
+}

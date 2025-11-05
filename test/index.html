@@ -1,0 +1,356 @@
+<!-- 文件: page_misc_leaks.html
+     用途: 注释或旧提交注释中包含敏感信息 -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Comment Leaks</title></head><body>
+<!--
+  TODO: rollback password for admin was "OldAdminPass123" - REMOVED (but left here for testing)
+  API token (old): oldtoken_FAKE_000
+-->
+<p>页面内容（测试）</p>
+</body></html>
+
+<!-- 文件: page_email_template.html
+     用途: 邮件模板含占位符但示例显示真实样式的敏感字段 -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Email Template</title></head><body>
+<pre>
+To: {{user.email}}  -> test.user@example.com
+Subject: 订单确认 - #ORDER_12345
+Body:
+  亲爱的 张三（TEST），
+  您的订单 #ORDER_12345 已确认。付款信息: 卡号 **** **** **** 1111 到期 12/34。
+</pre>
+</body></html>
+
+<!-- 文件: page_server_error_leak.html
+     用途: 错误页面示例包含堆栈和配置（模拟） -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Error Leak</title></head><body>
+<h2>服务器错误（TEST）</h2>
+<pre>
+Error: DB connection failed at connect (db.js:45)
+DB Connection: mysql://db_admin:DB_PASS_FAKE_1234@db.test.internal:3306/mydb
+Stack:
+  at Object.connect (db.js:45:15)
+  at Server.requestHandler (app.js:120:25)
+</pre>
+</body></html>
+<!-- 文件: page_obfuscated.html
+     用途: base64 编码的敏感串出现在脚本/HTML 中 -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Obfuscated Data</title></head><body>
+<script>
+const b64 = "dGVzdF9zdWJqZWN0OnRlc3Rfc2VjcmV0X0ZBS0U="; // base64("test_subject:test_secret_FAKE")
+console.log(atob(b64)); // 解码后为敏感样例（测试）
+</script>
+</body></html>
+<!-- 文件: page_query_params.html
+     用途: URL 中以 GET 参数泄露 token / ssn -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Query Params</title></head><body>
+<p>请访问: <a id="link" href="https://example.test/confirm?email=test@example.com&token=FAKE_TOKEN_12345&ssn=000-00-0000">测试链接</a></p>
+</body></html>
+
+<!-- 文件: page_config_js.html
+     用途: 前端/后端配置示例（在前端仅为测试，不要在真实前端暴露） -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Config Leak</title></head><body>
+<script>
+const CONFIG = {
+  database: {
+    host: "db.test.internal",
+    port: 3306,
+    user: "db_admin",
+    password: "DB_PASS_FAKE_1234"
+  },
+  smtp: {
+    url: "smtp://user:pass@smtp.example.com:587"
+  }
+};
+console.log("CONFIG (TEST)");
+</script>
+</body></html>
+
+<!-- 文件: page_private_key.html
+     用途: 页面或文件中包含 PEM 私钥（仅示例/FAKE） -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Private Key</title></head><body>
+<pre id="pem">
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAFAKE_PRIVATE_KEY_CONTENT_XXXXXXXXXXXXXXXX
+... (FAKE CONTENT) ...
+-----END RSA PRIVATE KEY-----
+</pre>
+</body></html>
+<!-- 文件: page_cc_form.html
+     用途: 页面表单包含信用卡号、到期、CVV（均为测试号或标注为 FAKE） -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Payment Form</title></head><body>
+<form id="pay">
+  <label>卡号: <input name="cc" value="4111 1111 1111 1111" /></label><br/>
+  <label>到期: <input name="exp" value="12/34" /></label><br/>
+  <label>CVV: <input name="cvv" value="123" /></label><br/>
+  <button>支付（测试）</button>
+</form>
+</body></html>
+<!-- 文件: page_jwt_and_cookies.html
+     用途: cookies 和 localStorage 中的 token / session id 样例 -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Tokens in Storage</title></head><body>
+<script>
+// 模拟登录后 client-side 存储
+document.cookie = "sessionid=FAKE_SESSION_ABC123; HttpOnly=false; Secure=false";
+localStorage.setItem("access_token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE_PAYLOAD.FAKE_SIG");
+localStorage.setItem("refresh_token", "refresh_FAKE_9876543210");
+console.log("set cookies & localStorage (TEST)");
+</script>
+</body></html>
+<!-- 文件: page_api_tokens.html
+     用途: JS 文件内硬编码 API Key / Secret / OAuth Token（模拟） -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>API Keys in JS</title></head><body>
+<script>
+// 假 API Key / Secret（FAKE）
+const GOOGLE_API_KEY = "AIza_TEST_FAKE_XXXXXXXXXXXXXXXXXXXX";
+const STRIPE_PUBLISHABLE_KEY = "pk_test_FAKE1234567890";
+const SENTRY_DSN = "https://public:secret@o0.ingest.sentry.io/12345"; // FAKE
+// 假 OAuth token / Bearer
+const BEARER = "Bearer eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.FAKE_PAYLOAD.FAKE_SIG";
+console.log("API keys loaded (TEST)");
+</script>
+</body></html>
+<!-- 文件: page_credentials.html
+     用途: 表单/隐藏字段内出现用户名与明文密码 -->
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Credentials Test</title></head>
+<body>
+  <form id="login" action="/login">
+    <input type="text" name="username" value="test_user_01" />
+    <input type="password" name="password" value="P@ssw0rd_TEST123" />
+    <input type="hidden" name="api_token" value="dummytoken_ABC123XYZ" />
+    <button>提交</button>
+  </form>
+</body></html>
+<!-- 文件: page_pii.html
+     用途: 页面 DOM 中出现姓名/邮箱/电话/身份证号（均为 FAKE 测试数据） -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>PII Test</title></head>
+<body>
+  <h1>用户信息（测试）</h1>
+  <div id="user">
+    <p class="name">姓名: 张三（TEST）</p>
+    <p class="email">邮箱: zhangsan.test@example.com</p>
+    <p class="phone">电话: +86-138-0000-0000</p>
+    <p class="idcard">身份证号: 000000000000000000（FAKE）</p>
+  </div>
+<script>
+/**
+ * 文件: sensitive_samples.js
+ * 说明: 仅含合成/FAKE 测试数据，覆盖常见敏感信息模式。
+ * 用途: 用于检测器测试（DOM/静态分析/字符串/编码/注释/配置等）。
+ * 注意: 这些值均为伪造，请勿用于任何真实登录或网络请求。
+ */
+
+/* ===========================
+   1) 云厂商 AK/SK（显式变量）
+   =========================== */
+// AWS 风格 Access Key / Secret
+const AWS_ACCESS_KEY_ID = "AKIAFAKEEXAMPLE000000";
+const AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENGbPxRfiCYFAKESECRET";
+
+// Alibaba Cloud
+const ALICLOUD_ACCESS_KEY_ID = "LTAI_FAKE_1234567890abcdef";
+const ALICLOUD_ACCESS_KEY_SECRET = "FAKE_ALIBABA_SECRET_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Tencent Cloud (SecretId / SecretKey)
+const TENCENT_SECRET_ID = "AKIDFAKEabcdefghijklmnopqrstuvwxyz";
+const TENCENT_SECRET_KEY = "FAKEtencentSecretKey_1234567890";
+
+// Azure / Microsoft App (client id + secret)
+const AZURE_CLIENT_ID = "00000000-0000-0000-0000-000000000000";
+const AZURE_CLIENT_SECRET = "FAKE_AZURE_CLIENT_SECRET_XXXXXXXXXXXXXXXX";
+
+/* ===========================
+   2) GCP 服务账号 JSON（典型文件内容）
+   =========================== */
+const GCP_SERVICE_ACCOUNT = {
+  "type": "service_account",
+  "project_id": "fake-project-123456",
+  "private_key_id": "abcdef1234567890abcdef1234567890abcdef",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nFAKE_PRIVATE_KEY_CONTENT_XXXXXXXXXXXXXXXX\n-----END PRIVATE KEY-----\n",
+  "client_email": "fake-sa@fake-project-123456.iam.gserviceaccount.com",
+  "client_id": "123456789012345678901",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token"
+};
+
+/* ===========================
+   3) 数据库/SMTP/连接串（配置泄露）
+   =========================== */
+const DB_CONFIG = {
+  host: "db.internal.test",
+  port: 3306,
+  username: "db_admin",
+  password: "DB_PASS_FAKE_!234",
+  uri: "mysql://db_admin:DB_PASS_FAKE_!234@db.internal.test:3306/maindb"
+};
+
+const SMTP_CONFIG = {
+  host: "smtp.testmail.com",
+  port: 587,
+  user: "noreply@testmail.com",
+  pass: "SMTP_PASS_FAKE_9876"
+};
+
+/* ===========================
+   4) OAuth / Bearer / JWT（HTTP Header 中常见）
+   =========================== */
+// 伪造的 Bearer token / JWT 样式
+const OAUTH_BEARER = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE_PAYLOAD.FAKE_SIGNATURE";
+const REFRESH_TOKEN = "refresh_FAKE_0123456789abcdef";
+
+/* ===========================
+   5) 用户账户与密码（明文）
+   =========================== */
+const SAMPLE_CREDENTIALS = [
+  { username: "alice.test", password: "AlicePass!FAKE1" },
+  { username: "bob.admin", password: "Admin#FAKE_2025" }
+];
+
+/* ===========================
+   6) 身份证 / 护照 / 社会保险号（PII）
+   =========================== */
+// 中国身份证（18 位）示例（FAKE）
+const CHINA_ID_CARD = "123456200001011234"; // 测试用，非真实
+// 护照号（示例）
+const PASSPORT_NUMBER = "G12345678"; // FAKE
+// 美国社会安全号 SSN 格式（FAKE）
+const US_SSN = "000-12-3456"; // FAKE
+
+/* ===========================
+   7) 信用卡 / 支付信息（测试卡号样式）
+   =========================== */
+// 测试卡：Visa 测试号 4111 1111 1111 1111
+const PAYMENT_INFO = {
+  card_number: "4111111111111111", // 测试卡号
+  expiry: "12/34",
+  cvv: "123",
+  cardholder: "TEST USER"
+};
+
+/* ===========================
+   8) 私钥 / 证书 占位（PEM 格式）
+   =========================== */
+const RSA_PRIVATE_KEY_PEM = `-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAFAKE_PRIVATE_KEY_CONTENT_XXXXXXXXXXXXXXXXXXXXXXXX
+... (FAKE CONTENT FOR TESTING) ...
+-----END RSA PRIVATE KEY-----`;
+
+/* ===========================
+   9) 隐藏/注释中泄露（history / TODO / 注释）
+   =========================== */
+// 页面注释或源码注释中可能残留旧凭证
+// TODO: migrate admin password from OldAdminPass123 (left here for testing)
+// legacy_api_key=oldkey_FAKE_000
+
+/* ===========================
+   10) 编码/混淆后的敏感串（需要解码检测）
+   =========================== */
+// Base64 编码的 "cloud:AK:FAKE_ABC_123"
+const ENCODED_SAMPLE = "Y2xvdWQ6QUs6RkFLRV9BQkNfMTIz"; // base64("cloud:AK:FAKE_ABC_123")
+function decodeSample() {
+  try {
+    // 在浏览器环境可以用 atob()
+    if (typeof atob !== "undefined") {
+      return atob(ENCODED_SAMPLE);
+    } else {
+      // Node.js fallback
+      return Buffer.from(ENCODED_SAMPLE, "base64").toString("utf8");
+    }
+  } catch (e) {
+    return null;
+  }
+}
+
+/* ===========================
+   11) 日志 / 错误信息中包含连接串（模拟错误页输出）
+   =========================== */
+const ERROR_LEAK = `
+Error: Cannot connect to DB
+Details: mysql://db_admin:DB_PASS_FAKE_!234@db.internal.test:3306/maindb
+Stack: at connect (db.js:45)
+`;
+
+/* ===========================
+   12) 示例：组合暴露（environment-like object）
+   =========================== */
+const ENV_LEAKS = {
+  AWS: {
+    ACCESS_KEY_ID: AWS_ACCESS_KEY_ID,
+    SECRET_ACCESS_KEY: AWS_SECRET_ACCESS_KEY
+  },
+  GCP: GCP_SERVICE_ACCOUNT,
+  ALI: {
+    ACCESS_KEY_ID: ALICLOUD_ACCESS_KEY_ID,
+    ACCESS_KEY_SECRET: ALICLOUD_ACCESS_KEY_SECRET
+  },
+  TENCENT: {
+    SECRET_ID: TENCENT_SECRET_ID,
+    SECRET_KEY: TENCENT_SECRET_KEY
+  },
+  DB: DB_CONFIG,
+  SMTP: SMTP_CONFIG
+};
+
+/* ===========================
+   导出（方便 Node.js/测试脚本引入）
+   =========================== */
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY,
+    ALICLOUD_ACCESS_KEY_ID,
+    ALICLOUD_ACCESS_KEY_SECRET,
+    TENCENT_SECRET_ID,
+    TENCENT_SECRET_KEY,
+    AZURE_CLIENT_ID,
+    AZURE_CLIENT_SECRET,
+    GCP_SERVICE_ACCOUNT,
+    DB_CONFIG,
+    SMTP_CONFIG,
+    OAUTH_BEARER,
+    REFRESH_TOKEN,
+    SAMPLE_CREDENTIALS,
+    CHINA_ID_CARD,
+    PASSPORT_NUMBER,
+    US_SSN,
+    PAYMENT_INFO,
+    RSA_PRIVATE_KEY_PEM,
+    ENCODED_SAMPLE,
+    decodeSample,
+    ERROR_LEAK,
+    ENV_LEAKS
+  };
+}
+
+/* ===========================
+   检测标签建议（便于验证检测器输出）
+   ===========================
+   1) cloud-ak: AWS/Alibaba/Tencent/Azure 等访问 key id
+   2) cloud-sk: 对应 secret/key/secretKey
+   3) service-account: GCP JSON 中 private_key / client_email
+   4) db-credential: 数据库连接字符串 / 用户名 / 密码
+   5) smtp-credential: SMTP 用户/密码
+   6) jwt/bearer: Bearer token / JWT
+   7) pii: 身份证/护照/SSN/手机号/邮箱
+   8) payment: credit card / cvv / expiry
+   9) private-key: PEM 私钥/证书
+   10) encoded: base64/hex/URLencoded 包含的敏感串（需解码）
+   11) comment-leak: 注释中泄露的数据
+   =========================== */
+
+</script>
+</body>
+</html>
+

@@ -88,20 +88,59 @@ func (sid *SensitiveInfoDetector) LoadRulesFromFile(filename string) error {
 		return fmt.Errorf("读取规则文件失败: %v", err)
 	}
 	
-	// 解析JSON
-	var config RuleConfig
-	if err := json.Unmarshal(data, &config); err != nil {
+	// 🔧 修复: 使用map[string]interface{}来处理混合类型的JSON
+	var rawConfig map[string]interface{}
+	if err := json.Unmarshal(data, &rawConfig); err != nil {
 		return fmt.Errorf("解析规则文件失败: %v", err)
 	}
 	
-	// 清空现有规则（可选）
+	// 获取rules字段
+	rulesInterface, ok := rawConfig["rules"]
+	if !ok {
+		return fmt.Errorf("规则文件中未找到'rules'字段")
+	}
+	
+	rulesMap, ok := rulesInterface.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("'rules'字段格式不正确")
+	}
+	
+	// 清空现有规则
 	sid.patterns = make(map[string]*SensitivePattern)
 	
 	// 加载新规则
 	loadedCount := 0
-	for name, rule := range config.Rules {
+	for name, ruleInterface := range rulesMap {
+		// 跳过注释字段（以_开头或_comment开头）
+		if strings.HasPrefix(name, "_comment") || strings.HasPrefix(name, "_") {
+			continue
+		}
+		
+		// 检查是否为字符串类型（注释）
+		if _, ok := ruleInterface.(string); ok {
+			continue
+		}
+		
+		// 转换为RulePattern
+		ruleMap, ok := ruleInterface.(map[string]interface{})
+		if !ok {
+			fmt.Printf("警告: 规则 '%s' 格式不正确，跳过\n", name)
+			continue
+		}
+		
+		// 提取规则字段
+		pattern, _ := ruleMap["pattern"].(string)
+		severity, _ := ruleMap["severity"].(string)
+		mask, _ := ruleMap["mask"].(bool)
+		description, _ := ruleMap["description"].(string)
+		
+		if pattern == "" {
+			fmt.Printf("警告: 规则 '%s' 缺少pattern字段，跳过\n", name)
+			continue
+		}
+		
 		// 编译正则表达式
-		regex, err := regexp.Compile(rule.Pattern)
+		regex, err := regexp.Compile(pattern)
 		if err != nil {
 			fmt.Printf("警告: 规则 '%s' 的正则表达式编译失败: %v\n", name, err)
 			continue
@@ -111,9 +150,9 @@ func (sid *SensitiveInfoDetector) LoadRulesFromFile(filename string) error {
 		sid.patterns[name] = &SensitivePattern{
 			Name:        name,
 			Pattern:     regex,
-			Severity:    rule.Severity,
-			Mask:        rule.Mask,
-			Description: rule.Description,
+			Severity:    severity,
+			Mask:        mask,
+			Description: description,
 		}
 		loadedCount++
 	}
@@ -130,17 +169,56 @@ func (sid *SensitiveInfoDetector) MergeRulesFromFile(filename string) error {
 		return fmt.Errorf("读取规则文件失败: %v", err)
 	}
 	
-	// 解析JSON
-	var config RuleConfig
-	if err := json.Unmarshal(data, &config); err != nil {
+	// 🔧 修复: 使用map[string]interface{}来处理混合类型的JSON
+	var rawConfig map[string]interface{}
+	if err := json.Unmarshal(data, &rawConfig); err != nil {
 		return fmt.Errorf("解析规则文件失败: %v", err)
+	}
+	
+	// 获取rules字段
+	rulesInterface, ok := rawConfig["rules"]
+	if !ok {
+		return fmt.Errorf("规则文件中未找到'rules'字段")
+	}
+	
+	rulesMap, ok := rulesInterface.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("'rules'字段格式不正确")
 	}
 	
 	// 合并规则
 	loadedCount := 0
-	for name, rule := range config.Rules {
+	for name, ruleInterface := range rulesMap {
+		// 跳过注释字段
+		if strings.HasPrefix(name, "_comment") || strings.HasPrefix(name, "_") {
+			continue
+		}
+		
+		// 检查是否为字符串类型（注释）
+		if _, ok := ruleInterface.(string); ok {
+			continue
+		}
+		
+		// 转换为RulePattern
+		ruleMap, ok := ruleInterface.(map[string]interface{})
+		if !ok {
+			fmt.Printf("警告: 规则 '%s' 格式不正确，跳过\n", name)
+			continue
+		}
+		
+		// 提取规则字段
+		pattern, _ := ruleMap["pattern"].(string)
+		severity, _ := ruleMap["severity"].(string)
+		mask, _ := ruleMap["mask"].(bool)
+		description, _ := ruleMap["description"].(string)
+		
+		if pattern == "" {
+			fmt.Printf("警告: 规则 '%s' 缺少pattern字段，跳过\n", name)
+			continue
+		}
+		
 		// 编译正则表达式
-		regex, err := regexp.Compile(rule.Pattern)
+		regex, err := regexp.Compile(pattern)
 		if err != nil {
 			fmt.Printf("警告: 规则 '%s' 的正则表达式编译失败: %v\n", name, err)
 			continue
@@ -150,9 +228,9 @@ func (sid *SensitiveInfoDetector) MergeRulesFromFile(filename string) error {
 		sid.patterns[name] = &SensitivePattern{
 			Name:        name,
 			Pattern:     regex,
-			Severity:    rule.Severity,
-			Mask:        rule.Mask,
-			Description: rule.Description,
+			Severity:    severity,
+			Mask:        mask,
+			Description: description,
 		}
 		loadedCount++
 	}
@@ -175,12 +253,9 @@ func (sid *SensitiveInfoDetector) Scan(content string, sourceURL string) []*Sens
 			
 			for _, match := range matches {
 				if len(match) > 0 {
+					// 🔧 修复: 始终使用match[0]（完整匹配）作为敏感信息的完整值
+					// 如果规则需要提取特定部分，应该在规则设计时使用非捕获组(?:...)
 					fullValue := match[0]
-					
-					// 如果有捕获组，使用最后一个捕获组作为值
-					if len(match) > 1 {
-						fullValue = match[len(match)-1]
-					}
 					
 					// 脱敏处理
 					displayValue := fullValue
@@ -190,8 +265,8 @@ func (sid *SensitiveInfoDetector) Scan(content string, sourceURL string) []*Sens
 					
 					info := &SensitiveInfo{
 						Type:       pattern.Name,
-						Value:      displayValue,
-						FullValue:  fullValue,
+						Value:      displayValue,  // 脱敏后的值
+						FullValue:  fullValue,     // 完整的原始值
 						Location:   fmt.Sprintf("Line %d", lineNum+1),
 						Severity:   pattern.Severity,
 						SourceURL:  sourceURL,
@@ -396,7 +471,8 @@ func (sid *SensitiveInfoDetector) ExportFindings() []map[string]interface{} {
 	for _, finding := range sid.findings {
 		export := make(map[string]interface{})
 		export["type"] = finding.Type
-		export["value"] = finding.Value
+		export["value"] = finding.Value          // 脱敏后的值
+		export["full_value"] = finding.FullValue // 完整值
 		export["location"] = finding.Location
 		export["severity"] = finding.Severity
 		export["source_url"] = finding.SourceURL

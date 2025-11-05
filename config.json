@@ -1,379 +1,253 @@
 {
   "_comment": "═══════════════════════════════════════════════════════════════",
-  "_title": "GogoSpider v3.3 - 完整配置文件",
-  "_description": "本配置文件包含所有配置项和详细说明，适合各种爬虫场景",
-  "_version": "v3.3",
-  "_updated": "2025-10-26",
+  "_title": "GogoSpider v4.4 - 优化配置（解决重复请求和响应时间问题）",
+  "_优化说明_1": "✅ 启用静态资源过滤（图片、CSS等只记录不请求）",
+  "_优化说明_2": "✅ JS文件会被访问和分析（不会被过滤）",
+  "_优化说明_3": "✅ 加强参数去重，减少相似URL请求",
+  "_优化说明_4": "✅ 降低并发，便于观察响应时间",
   "_comment_separator": "═══════════════════════════════════════════════════════════════",
   
-  "target_url": "http://x.lydaas.com",
+  "target_url": "http://testphp.vulnweb.com",
   
-  "_comment_depth": "═══ 爬取深度配置 ═══",
   "depth_settings": {
-    "_comment": "控制爬虫的爬取深度和调度策略",
     "max_depth": 5,
-    "_max_depth_note": "推荐值: 快速扫描2-3, 深度扫描5-10, 最大20",
     "deep_crawling": true,
-    "scheduling_algorithm": "BFS",
-    "_algorithm_note": "BFS=广度优先(推荐), DFS=深度优先（此选项已废弃，请使用scheduling_settings）"
+    "scheduling_algorithm": "BFS"
   },
   
-  "_comment_scheduling": "═══ 🆕 调度策略配置（v3.4核心功能）═══",
   "scheduling_settings": {
-    "_comment": "智能调度策略，控制URL爬取顺序和效率",
-    "algorithm": "HYBRID",
-    "_algorithm_note": "HYBRID=混合策略（BFS+优先级+自适应学习，推荐✨）, BFS=广度优先, PRIORITY_QUEUE=纯优先级队列",
-    
+    "algorithm": "BFS",
     "hybrid_config": {
       "enable_adaptive_learning": true,
-      "_adaptive_note": "自适应学习：根据爬取结果动态调整优先级权重，越爬越聪明",
-      "max_urls_per_layer": 1000,
-      "_max_urls_note": "🔧 修复：提高限制（100→1000），收集更多URL。推荐500-1000，设为0不限制",
+      "max_urls_per_layer": 500,
+      "_优化_1": "从1000降低到500，减少每层爬取数量",
       "high_value_threshold": 80.0,
-      "_threshold_note": "高价值URL阈值（0-100），超过此值的URL总是优先爬取",
       "learning_rate": 0.15,
-      "_learning_rate_note": "学习率（0.1-0.5），控制权重调整的速度，默认0.15",
-      
       "priority_weights": {
         "depth": 3.0,
-        "_depth_note": "深度因子权重（浅层优先）推荐2-5",
         "internal": 2.0,
-        "_internal_note": "域内链接权重，推荐1-3",
         "params": 1.5,
-        "_params_note": "参数权重（带参数的URL更重要）推荐1-3",
         "recent": 1.0,
-        "_recent_note": "新鲜度权重（新发现的URL）推荐0.5-2",
         "path_value": 4.0,
-        "_path_value_note": "路径价值权重（/admin, /api等高价值路径）推荐3-5",
-        "business_value": 0.5,
-        "_business_note": "业务价值权重（结合业务感知过滤器）推荐0.3-1.0"
+        "business_value": 0.5
       }
     },
-    
     "performance_config": {
-      "max_concurrent_requests": 20,
-      "_concurrent_note": "最大并发请求数，推荐: 小站10-20, 中站30-50, 大站50-100",
+      "max_concurrent_requests": 1,
+      "_修复并发": "降到1消除竞态条件，测试去重是否正常",
       "request_timeout": 30,
-      "_timeout_note": "请求超时时间（秒），推荐20-60",
       "max_retry": 3,
-      "_retry_note": "失败重试次数，推荐2-5",
       "enable_connection_pool": true,
-      "_pool_note": "启用连接池，提升性能",
       "max_memory_mb": 1024,
-      "_memory_note": "最大内存使用（MB），推荐512-2048",
-      "enable_disk_cache": false,
-      "_cache_note": "启用磁盘缓存（大规模爬取时使用）"
+      "enable_disk_cache": false
     }
   },
   
-  "_comment_strategy": "═══ 爬取策略配置 ═══",
   "strategy_settings": {
-    "_comment": "控制爬虫使用哪些技术和策略",
     "enable_static_crawler": true,
-    "_static_note": "静态爬虫：解析HTML提取链接、表单等",
     "enable_dynamic_crawler": true,
-    "_dynamic_note": "动态爬虫：使用Chrome执行JS、拦截AJAX请求",
     "enable_js_analysis": true,
-    "_js_note": "JS分析：提取JS代码中的URL、API端点、配置",
+    "_js_说明": "JS文件会被访问，这里只控制是否深度分析JS内容",
     "enable_api_inference": true,
-    "_api_note": "API推测：根据现有URL推测可能的API端点",
     "domain_scope": "",
-    "_scope_note": "留空表示不限制，或填写域名如'example.com'",
     "use_priority_queue": false,
-    "_priority_note": "已废弃，请使用scheduling_settings.algorithm",
-    "enable_common_path_scan": false,
-    "_path_scan_note": "扫描200+个常见路径（如/admin, /api等），可能较慢"
+    "enable_common_path_scan": false
   },
   
-  "_comment_anti_detection": "═══ 反爬虫检测配置 ═══",
   "anti_detection_settings": {
-    "_comment": "避免被目标网站检测和封禁",
     "request_delay": 500000000,
-    "_delay_note": "单位：纳秒。500000000 = 500毫秒。推荐值: 100-1000毫秒",
+    "_delay_note": "500毫秒延迟",
     "user_agents": [
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     ],
-    "_ua_note": "User-Agent列表，程序会随机选择",
     "proxies": [],
-    "_proxy_note": "代理服务器列表，格式: ['http://127.0.0.1:8080']",
     "enable_form_auto_fill": true,
-    "_form_note": "自动填充表单（支持20+种字段类型）",
-    
-    "_comment_cookie": "【Cookie配置】二选一即可",
     "cookie_file": "",
-    "_cookie_file_note": "Cookie文件路径。支持JSON格式和文本格式",
-    "_cookie_file_format_json": "{\"cookies\": [{\"name\": \"session\", \"value\": \"xxx\", \"domain\": \"example.com\"}]}",
-    "_cookie_file_format_text": "session=xxx; token=yyy",
     "cookie_string": "",
-    "_cookie_string_note": "Cookie字符串，格式: name1=value1; name2=value2",
-    "_cookie_example": "session=abc123; token=xyz789; userid=12345",
-    
-    "_comment_https": "【HTTPS证书验证】",
-    "insecure_skip_verify": false,
-    "_insecure_note": "false=验证证书(默认,安全), true=忽略证书错误",
-    "_insecure_use_case": "内网环境、自签名证书、证书过期时设为true"
+    "insecure_skip_verify": false
   },
   
-  "_comment_deduplication": "═══ 去重配置 ═══",
   "deduplication_settings": {
-    "_comment": "智能去重，避免爬取重复或相似的页面",
+    "_优化说明": "加强去重配置，减少重复请求",
     "similarity_threshold": 0.85,
-    "_similarity_note": "DOM相似度阈值(0-1)。0.85表示85%以上相似视为重复",
     "enable_dom_deduplication": true,
     "enable_url_pattern_recognition": true,
     "enable_smart_param_dedup": true,
-    "_smart_param_note": "智能参数值去重，避免爬取大量相似参数值的URL",
-    "max_param_value_variants_per_group": 10,
-    "_variants_note": "🔧 修复：从3提高到10，保留更多参数变体（过滤层第5层优化）",
+    "max_param_value_variants_per_group": 3,
+    "_优化_3": "从10降低到3，每种参数模式最多爬取3个变体",
     
-    "_comment_business": "业务感知过滤配置",
-    "enable_business_aware_filter": false,
-    "_filter_fix_note": "🔧 修复：临时关闭业务过滤，减少误杀。验证效果后可开启",
+    "_v4.5_新功能": "✅ URL模式+DOM相似度去重（更精准的去重策略）",
+    "enable_url_pattern_dom_dedup": true,
+    "_url_pattern_dom_说明": "对URL相似的请求先采样3次验证DOM相似度，避免误判",
+    "url_pattern_dom_sample_count": 3,
+    "_sample_count_说明": "采样次数，默认3次验证",
+    "url_pattern_dom_threshold": 0.85,
+    "_threshold_说明": "DOM相似度阈值，默认85%",
+    
+    "enable_business_aware_filter": true,
     "business_filter_min_score": 30.0,
-    "_min_score_note": "业务价值最低分数(0-100)，低于此分数的URL可能被过滤",
     "business_filter_high_value_threshold": 70.0,
-    "_high_value_note": "高价值URL阈值，高于此分数的URL总是保留",
     "business_filter_max_low_value": 2,
     "business_filter_max_mid_value": 5,
     "business_filter_max_high_value": 20,
-    "_filter_note": "同模式URL最大爬取数量：低价值2个、中等5个、高价值20个",
     "business_filter_adaptive_learning": true,
-    "_adaptive_note": "自适应学习：根据爬取结果动态调整URL价值评分",
     
-    "_comment_validation": "参数验证配置",
     "enable_param_validation": true,
     "param_validation_similarity": 0.95,
-    "_validation_similarity_note": "响应相似度阈值(0-1)，用于判断参数是否有效",
     "param_validation_max_similar": 3,
-    "_max_similar_note": "连续3次相同响应就停止该参数的爬取",
-    "param_validation_min_diff": 50,
-    "_min_diff_note": "响应差异最小字节数，小于此值视为相同响应"
+    "param_validation_min_diff": 50
   },
   
-  "_comment_scope": "═══ 作用域控制配置 ═══",
   "scope_settings": {
-    "_comment": "✅ 精确控制爬取范围，这是v3.3的核心功能",
+    "_优化说明": "✅ 关键配置：启用静态资源过滤",
     "enabled": true,
-    
-    "_comment_domains": "【域名控制】",
     "include_domains": [],
-    "_include_domains_note": "只爬取这些域名。支持通配符: ['*.example.com', 'api.example.com']",
-    "_include_domains_example": "留空表示不限制域名",
     "exclude_domains": [],
-    "_exclude_domains_note": "排除这些域名: ['cdn.example.com', 'static.example.com']",
-    
-    "_comment_paths": "【路径控制】",
     "include_paths": [],
-    "_include_paths_note": "只爬取这些路径。支持通配符: ['/api/*', '/admin/*', '/user/*']",
-    "_include_paths_example": "API发现场景：['/api/*', '/v1/*', '/graphql']",
     "exclude_paths": [],
-    "_exclude_paths_note": "排除这些路径: ['/logout', '/signout', '/static/*']",
-    
-    "_comment_regex": "【正则表达式控制】高级功能",
     "include_regex": "",
-    "_include_regex_note": "包含URL的正则表达式",
     "exclude_regex": "",
-    "_exclude_regex_note": "排除URL的正则表达式",
-    
-    "_comment_extensions": "【文件扩展名控制】",
     "include_extensions": [],
-    "_include_extensions_note": "只爬取这些扩展名: ['php', 'jsp', 'aspx', 'do', 'action', 'js']",
-    "_include_extensions_api": "API发现：['json', 'xml', 'api']",
     
-    "_comment_exclude_important": "【✅ 重要】静态资源过滤配置",
-    "_exclude_note_1": "✅ JS文件已从排除列表移除，程序会自动访问和分析JS",
-    "_exclude_note_2": "✅ 静态资源只记录不请求，提升爬取效率70%+",
-    "_exclude_note_3": "✅ 黑名单和超出范围的URL也只记录不请求",
-    "exclude_extensions": [],
-    "_exclude_extensions": [
+    "_exclude_extensions_说明": "✅ 这些扩展名会被记录但不会发起HTTP请求",
+    "_js_特殊说明": "✅ 注意：js不在排除列表中，会被正常访问和分析",
+    "exclude_extensions": [
       "jpg", "jpeg", "png", "gif", "svg", "ico", "webp", "bmp",
-      "css", "scss", "sass",
+      "css", "scss", "sass", "less",
       "woff", "woff2", "ttf", "eot", "otf",
       "mp4", "mp3", "avi", "mov", "wmv", "flv", "webm", "ogg", "wav",
       "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-      "zip", "rar", "tar", "gz", "7z"
+      "zip", "rar", "tar", "gz", "7z", "bz2",
+      "swf"
     ],
     
-    "_comment_other": "【其他控制】",
     "allow_subdomains": true,
-    "_subdomains_note": "🔧 修复：允许爬取子域名（如api.example.com），收集更多URL",
     "stay_in_domain": false,
-    "_stay_note": "🔧 修复：允许收集域外URL（会记录但可能不爬取）",
     "allow_http": true,
     "allow_https": true
   },
   
-  "_comment_rate_limit": "═══ 速率限制配置 ═══",
   "rate_limit_settings": {
-    "_comment": "控制请求速度，避免对目标网站造成压力",
     "enabled": false,
-    "_enabled_note": "是否启用速率限制。快速扫描可关闭，隐蔽扫描建议开启",
     "requests_per_second": 100,
-    "_rps_note": "每秒最大请求数。推荐值: 隐蔽5-10, 正常50-100, 快速200+",
     "burst_size": 10,
-    "_burst_note": "允许的突发请求数",
     "min_delay": 0,
     "max_delay": 0,
-    "_delay_range_note": "请求间隔范围(毫秒)。隐蔽扫描: min_delay=500, max_delay=2000",
     "adaptive": false,
-    "_adaptive_note": "自适应速率：根据目标响应速度动态调整",
     "adaptive_min_rate": 10,
-    "adaptive_max_rate": 200,
-    "_adaptive_range_note": "自适应速率范围：10-200 req/s"
+    "adaptive_max_rate": 200
   },
   
-  "_comment_external": "═══ 外部数据源配置 ═══",
   "external_source_settings": {
-    "_comment": "从历史数据获取更多URL（可选）",
     "enabled": false,
-    "_enabled_note": "是否启用外部数据源。需要网络访问第三方API",
     "enable_wayback_machine": false,
-    "_wayback_note": "Wayback Machine：获取网站历史快照中的URL",
     "enable_virustotal": false,
-    "_vt_note": "VirusTotal：需要API Key",
     "virustotal_api_key": "",
-    "_vt_key_note": "在 https://www.virustotal.com 申请API Key",
     "enable_common_crawl": false,
-    "_cc_note": "CommonCrawl：大规模网页爬取数据",
     "max_results_per_source": 1000,
-    "_max_results_note": "每个数据源最多获取1000个URL",
-    "timeout": 30,
-    "_timeout_note": "外部数据源超时时间（秒）"
+    "timeout": 30
   },
   
-  "_comment_pipeline": "═══ 管道模式配置 ═══",
   "pipeline_settings": {
-    "_comment": "与其他工具配合使用（如：cat urls.txt | spider -stdin）",
     "enabled": false,
     "enable_stdin": false,
-    "_stdin_note": "从标准输入读取URL",
     "enable_stdout": false,
-    "_stdout_note": "输出到标准输出（便于管道）",
     "input_format": "text",
     "output_format": "text",
-    "_format_note": "支持格式: text, json, jsonl",
-    "quiet": false,
-    "_quiet_note": "静默模式：不输出日志到stderr"
+    "quiet": false
   },
   
-  "_comment_sensitive": "═══ 敏感信息检测配置 ═══",
   "sensitive_detection_settings": {
-    "_comment": "检测API密钥、密码、Token等敏感信息",
     "enabled": true,
     "scan_response_body": true,
     "scan_response_headers": true,
     "min_severity": "LOW",
-    "_severity_note": "最低级别: LOW=显示所有, MEDIUM=中高危, HIGH=仅高危",
     "enable_custom_patterns": false,
     "custom_patterns": [],
-    "_custom_note": "自定义检测规则，格式见文档",
-    "save_full_value": false,
-    "_save_full_note": "false=只保存脱敏值(推荐,安全), true=保存完整值",
+    "save_full_value": true,
     "output_file": "",
-    "_output_note": "敏感信息单独输出文件，留空则包含在总报告中",
     "realtime_output": true,
-    "_realtime_note": "是否实时输出敏感信息发现",
     "exclude_url_patterns": [],
-    "_exclude_patterns_note": "不检测这些URL的敏感信息",
-    "rules_file": "./sensitive_rules_standard.json",
-    "_rules_file_note": "敏感信息规则文件路径",
-    "_rules_options": {
-      "标准规则": "sensitive_rules_standard.json (40个规则，推荐)",
-      "最小规则": "sensitive_rules_minimal.json (10个规则，快速)",
-      "完整规则": "sensitive_rules_config.json (100+规则，全面)"
-    }
+    "rules_file": "sensitive_rules.json"
   },
   
-  "_comment_blacklist": "═══ 黑名单配置 ═══",
   "blacklist_settings": {
-    "_comment": "✅ 黑名单URL会被记录但不访问",
     "enabled": true,
     "domains": ["*.gov.cn", "*.edu.cn", "*.mil.cn"],
-    "_domains_note": "黑名单域名列表，支持通配符",
-    "_domains_example": "添加更多: ['*.gov', '*.edu', '*.bank.com']",
     "domain_patterns": [],
-    "_patterns_note": "域名模式匹配: ['*bank*', '*payment*', '*admin.gov*']",
-    "strict_mode": true,
-    "_strict_note": "true=完全拒绝访问(推荐), false=只记录警告"
+    "strict_mode": true
   },
   
-  "_comment_batch": "═══ 批量扫描配置 ═══",
   "batch_scan_settings": {
-    "_comment": "批量扫描多个目标（命令行 -batch-file 时使用）",
     "enabled": false,
-    "_enabled_note": "通过命令行 -batch-file 参数启用",
     "input_file": "targets.txt",
-    "_input_note": "URL列表文件，每行一个URL，支持#注释",
     "concurrency": 5,
-    "_concurrency_note": "并发扫描数量，推荐3-10",
     "output_dir": "./batch_results",
     "per_target_timeout": 3600,
-    "_timeout_note": "每个目标的超时时间（秒），3600=1小时",
     "continue_on_error": true,
-    "_continue_note": "遇到错误是否继续扫描其他目标",
     "save_individual_reports": true,
     "save_summary_report": true
   },
   
-  "_comment_output": "═══ 输出配置 ═══",
   "output_settings": {
-    "_comment": "控制输出格式和内容",
     "format": "text",
-    "_format_note": "输出格式: text=文本, json=JSON, jsonl=每行一个JSON",
     "output_file": "",
-    "_output_file_note": "输出文件路径，留空则输出到stdout",
     "json_mode": "line",
-    "_json_mode_note": "JSON模式: compact=压缩, pretty=格式化, line=每行一个",
     "include_all": false,
-    "_include_all_note": "是否包含所有字段（false只输出核心字段）",
-    "verbose": false,
-    "_verbose_note": "详细模式：输出更多调试信息"
+    "verbose": false
   },
   
-  "_comment_log": "═══ 日志配置 ═══",
   "log_settings": {
-    "_comment": "控制日志级别和输出位置",
     "level": "INFO",
-    "_level_note": "日志级别: DEBUG, INFO, WARN, ERROR",
-    "_level_recommend": "开发调试用DEBUG, 日常使用INFO, 生产环境WARN",
     "output_file": "",
-    "_log_file_note": "日志文件路径，留空则输出到控制台",
     "format": "json",
-    "_log_format_note": "日志格式: json=结构化(推荐), text=纯文本",
-    "show_metrics": false,
-    "_metrics_note": "是否显示实时监控指标（如内存、速度等）"
+    "show_metrics": false
   },
   
-  "_comment_advanced": "═══ 🆕 高级功能配置（v3.4新增）═══",
   "advanced_settings": {
-    "_comment": "高级爬取功能和优化",
     "enable_smart_throttling": true,
-    "_throttling_note": "智能限速：根据目标响应速度自动调整请求频率",
     "enable_cdn_optimization": true,
-    "_cdn_note": "CDN优化：智能识别CDN资源（60+个CDN），优化爬取策略",
     "enable_graphql_detection": true,
-    "_graphql_note": "GraphQL检测：自动发现和分析GraphQL端点",
     "enable_websocket_monitoring": false,
-    "_websocket_note": "WebSocket监控：捕获WebSocket通信（实验性）",
-    "enable_api_versioning_detection": true,
-    "_versioning_note": "API版本检测：自动发现/api/v1, /api/v2等版本"
+    "enable_api_versioning_detection": true
   },
   
-  "_comment_output_advanced": "═══ 🆕 输出增强配置（v3.4新增）═══",
   "output_advanced": {
-    "_comment": "高级分析和可视化输出",
     "save_crawl_timeline": true,
-    "_timeline_note": "保存爬取时间线（分析爬取过程）",
     "save_priority_distribution": true,
-    "_distribution_note": "保存优先级分布图（可视化分析）",
     "save_business_value_analysis": true,
-    "_analysis_note": "保存业务价值分析报告",
     "enable_realtime_dashboard": false,
-    "_dashboard_note": "实时仪表板（Web界面，实验性）",
-    "dashboard_port": 8080,
-    "_port_note": "仪表板端口，默认8080"
-  }
+    "dashboard_port": 8080
+  },
+  
+  "filter_settings": {
+    "_优化说明": "✅ 统一过滤管理器配置",
+    "enabled": true,
+    "preset": "balanced",
+    "mode": "balanced",
+    "enable_caching": true,
+    "cache_size": 10000,
+    "enable_early_stop": true,
+    "enable_trace": false,
+    "trace_buffer_size": 100,
+    "verbose_logging": false,
+    
+    "_关键配置_1": "外部链接：degrade=记录但不爬取",
+    "external_link_action": "degrade",
+    
+    "_关键配置_2": "静态资源：degrade=记录但不请求（✅ 核心配置）",
+    "static_resource_action": "degrade",
+    
+    "min_business_score": 30.0,
+    "high_value_threshold": 70.0
+  },
+  
+  "enable_performance_optimizations": false,
+  "_performance_note": "性能优化是实验性功能，暂不启用",
+  
+  "enable_request_logging": true,
+  "_request_logging_note": "✅ 启用请求日志，用于调试和分析"
 }
 

@@ -90,6 +90,15 @@ func (s *StaticCrawlerImpl) SetRedirectManager(rm *RedirectManager) {
 // SetSpider 设置Spider引用（v3.7新增，实现Crawler接口）
 func (s *StaticCrawlerImpl) SetSpider(spider SpiderRecorder) {
 	s.spider = spider
+	
+	// 🆕 v4.5: 使用Spider的共享去重器（修复多实例问题）
+	if spider != nil {
+		sharedDedup := spider.GetDuplicateHandler()
+		if sharedDedup != nil {
+			s.duplicateHandler = sharedDedup
+			fmt.Printf("🔧 [静态爬虫] 使用共享去重器 (地址: %p)\n", sharedDedup)
+		}
+	}
 }
 
 // Crawl 执行爬取
@@ -125,6 +134,14 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	
 	// 设置请求前回调，实现User-Agent轮换、域名范围检查和Cookie应用
 	collector.OnRequest(func(r *colly.Request) {
+		// 🆕 v4.5: 在Colly层面阻止重复请求（关键修复！）
+		// 必须在OnRequest最开始就检查，避免发起HTTP请求
+		if s.duplicateHandler != nil && s.duplicateHandler.IsDuplicateURL(r.URL.String()) {
+			// URL已经被访问过，中止本次请求
+			r.Abort()
+			return
+		}
+		
 		// 检查域名范围限制
 		if s.config.StrategySettings.DomainScope != "" {
 			requestURL, err := url.Parse(r.URL.String())
@@ -159,6 +176,24 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 				r.Headers.Set("Cookie", cookieHeader)
 			}
 		}
+		
+	// 🆕 v4.4: 记录请求日志和开始时间
+	if s.spider != nil {
+		logger := s.spider.GetRequestLogger()
+		if logger != nil && logger.IsEnabled() {
+			// 转换Headers
+			headers := make(map[string]string)
+			for key, values := range *r.Headers {
+				if len(values) > 0 {
+					headers[key] = values[0]
+				}
+			}
+			logger.LogRequest("GET", r.URL.String(), headers, "")
+			
+			// 记录请求开始时间（存储在请求上下文中）
+			r.Ctx.Put("request_start_time", time.Now())
+		}
+	}
 	})
 	
 	// 设置HTML回调 - 提取所有可能包含URL的元素
@@ -648,6 +683,21 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 		result.StatusCode = r.StatusCode
 		result.ContentType = r.Headers.Get("Content-Type")
 		
+	// 🆕 v4.4: 记录响应日志（修复：计算实际响应时间）
+	if s.spider != nil {
+		logger := s.spider.GetRequestLogger()
+		if logger != nil && logger.IsEnabled() {
+			// 计算响应时间
+			var responseTime int64 = 0
+			if startTime := r.Request.Ctx.GetAny("request_start_time"); startTime != nil {
+				if t, ok := startTime.(time.Time); ok {
+					responseTime = time.Since(t).Milliseconds()
+				}
+			}
+			logger.LogResponse(r.Request.URL.String(), r.StatusCode, responseTime, nil)
+		}
+	}
+		
 		// 🆕 v3.2: 检测重定向（通过响应码和Location头）
 		if s.redirectManager != nil {
 			if r.StatusCode >= 300 && r.StatusCode < 400 {
@@ -732,6 +782,27 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	// 设置错误回调
 	collector.OnError(func(r *colly.Response, err error) {
 		fmt.Printf("请求错误 %s: %v\n", r.Request.URL, err)
+		
+	// 🆕 v4.4: 记录错误日志（修复：计算实际响应时间）
+	if s.spider != nil {
+		logger := s.spider.GetRequestLogger()
+		if logger != nil && logger.IsEnabled() {
+			statusCode := 0
+			if r != nil {
+				statusCode = r.StatusCode
+			}
+			
+			// 计算响应时间
+			var responseTime int64 = 0
+			if startTime := r.Request.Ctx.GetAny("request_start_time"); startTime != nil {
+				if t, ok := startTime.(time.Time); ok {
+					responseTime = time.Since(t).Milliseconds()
+				}
+			}
+			
+			logger.LogResponse(r.Request.URL.String(), statusCode, responseTime, err)
+		}
+	}
 	})
 	
 	// 开始爬取

@@ -84,6 +84,8 @@ type SpiderRecorder interface {
 	RecordSpecialLink(url string, protocol string)
 	RecordBlacklistedURL(url string)
 	GetResourceClassifier() *ResourceClassifier
+	GetRequestLogger() *RequestLogger // 🆕 v4.4: 获取请求日志记录器
+	GetDuplicateHandler() *DuplicateHandler // 🆕 v4.5: 获取去重处理器（修复多实例问题）
 }
 
 // StaticCrawler 静态爬虫接口

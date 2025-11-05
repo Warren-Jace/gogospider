@@ -185,6 +185,12 @@ func (sc *ScopeController) matchDomain(host, pattern string) bool {
 		return true
 	}
 	
+	// 🔧 修复: IP地址匹配支持
+	// 如果host是IP地址，只进行精确匹配
+	if isIPAddress(host) {
+		return host == pattern
+	}
+	
 	// 通配符匹配: *.example.com
 	if strings.HasPrefix(pattern, "*.") {
 		baseDomain := pattern[2:]
@@ -203,6 +209,34 @@ func (sc *ScopeController) matchDomain(host, pattern string) bool {
 		}
 	}
 	
+	return false
+}
+
+// isIPAddress 判断是否为IP地址（IPv4或IPv6）
+func isIPAddress(host string) bool {
+	// 简单的IP地址检测：包含数字和点，或包含冒号（IPv6）
+	// IPv4: xxx.xxx.xxx.xxx
+	if strings.Contains(host, ".") {
+		parts := strings.Split(host, ".")
+		if len(parts) == 4 {
+			for _, part := range parts {
+				// 检查是否全是数字
+				if len(part) == 0 || len(part) > 3 {
+					return false
+				}
+				for _, c := range part {
+					if c < '0' || c > '9' {
+						return false
+					}
+				}
+			}
+			return true
+		}
+	}
+	// IPv6: 包含多个冒号
+	if strings.Count(host, ":") >= 2 {
+		return true
+	}
 	return false
 }
 

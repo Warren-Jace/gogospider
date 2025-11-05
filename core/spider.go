@@ -94,6 +94,9 @@ type Spider struct {
 	// 🆕 v3.6 新增组件 - 分层去重策略
 	layeredDedup       *LayeredDeduplicator     // 分层去重器（智能分类去重）
 	
+	// 🆕 v4.5: URL模式+DOM相似度去重器
+	urlPatternDOMDedup *URLPatternWithDOMDeduplicator // URL模式+DOM去重器（采样验证策略）
+	
 	// 🆕 v4.2: URL规范化器（专家修复方案）
 	urlCanonicalizer   *URLCanonicalizer        // URL规范化器（IDN、去重斜杠、tracking过滤）
 	
@@ -134,6 +137,9 @@ type Spider struct {
 
 	// v2.6: 日志和监控
 	logger Logger // 结构化日志记录器
+	
+	// 🆕 v4.4: 请求日志记录器
+	requestLogger *RequestLogger // 请求日志记录器（用于调试优化）
 }
 
 // NewSpider 创建爬虫实例
@@ -205,6 +211,12 @@ func NewSpider(cfg *config.Config) *Spider {
 		// 🆕 v3.6: 初始化分层去重器
 		layeredDedup:      NewLayeredDeduplicator(),       // 分层去重器（智能分类去重）
 		
+		// 🆕 v4.5: 初始化URL模式+DOM去重器
+		urlPatternDOMDedup: NewURLPatternWithDOMDeduplicator(
+			cfg.DeduplicationSettings.URLPatternDOMSampleCount,
+			cfg.DeduplicationSettings.URLPatternDOMThreshold,
+		), // URL模式+DOM去重器（采样验证策略）
+		
 		// 🆕 v4.2: 初始化URL规范化器
 		urlCanonicalizer:  NewURLCanonicalizer(),          // URL规范化器（专家修复方案）
 		
@@ -249,6 +261,9 @@ func NewSpider(cfg *config.Config) *Spider {
 
 		// v2.6: 初始化日志
 		logger: logger,
+		
+		// 🆕 v4.4: 初始化请求日志记录器
+		requestLogger: NewRequestLogger(cfg.EnableRequestLogging, 100000),
 	}
 	
 	// 🆕 v4.2: 初始化统一URL过滤管理器
@@ -394,8 +409,15 @@ func (s *Spider) Start(targetURL string) error {
 	s.advancedScope.PresetStaticFilterScope() // 过滤静态资源
 	
 	// 🆕 v3.1: 初始化作用域控制器
+	// 🔧 修复: 如果IncludeDomains为空，自动添加目标域名/IP地址
+	includeDomains := s.config.ScopeSettings.IncludeDomains
+	if len(includeDomains) == 0 {
+		// 自动添加目标域名（支持IP地址）
+		includeDomains = []string{s.targetDomain}
+	}
+	
 	scopeConfig := ScopeConfig{
-		IncludeDomains:    s.config.ScopeSettings.IncludeDomains,
+		IncludeDomains:    includeDomains,
 		ExcludeDomains:    s.config.ScopeSettings.ExcludeDomains,
 		IncludePaths:      s.config.ScopeSettings.IncludePaths,
 		ExcludePaths:      s.config.ScopeSettings.ExcludePaths,
@@ -588,6 +610,11 @@ func (s *Spider) Start(targetURL string) error {
 		}
 	}
 
+	// 🆕 打印去重器统计信息（调试用）
+	if s.duplicateHandler != nil {
+		s.duplicateHandler.PrintStats()
+	}
+
 	return nil
 }
 
@@ -741,6 +768,15 @@ func (s *Spider) addResult(result *Result) {
 			// 相似页面仍然记录，但标记为已跳过
 			result.IsSimilar = true
 			result.SimilarToURL = record.SimilarToURL
+		}
+	}
+	
+	// 🆕 v4.5: URL模式+DOM相似度去重 - 记录DOM签名
+	if result.HTMLContent != "" && s.config.DeduplicationSettings.EnableURLPatternDOMDedup && s.urlPatternDOMDedup != nil {
+		if err := s.urlPatternDOMDedup.RecordDOMSignature(result.URL, result.HTMLContent); err != nil {
+			s.logger.Warn("记录DOM签名失败",
+				"url", result.URL,
+				"error", err.Error())
 		}
 	}
 
@@ -1854,6 +1890,19 @@ func (s *Spider) crawlLayer(links []string, depth int) []*Result {
 
 	// 提交所有任务
 	for _, link := range links {
+		// 🆕 v4.5: URL模式+DOM相似度去重检查
+		if s.config.DeduplicationSettings.EnableURLPatternDOMDedup && s.urlPatternDOMDedup != nil {
+			shouldCrawl, reason, needsDOMAnalysis := s.urlPatternDOMDedup.ShouldCrawl(link)
+			if !shouldCrawl {
+				// 跳过爬取
+				fmt.Printf("  [URL模式+DOM去重] 跳过: %s\n    原因: %s\n", link, reason)
+				continue
+			}
+			if needsDOMAnalysis {
+				fmt.Printf("  [URL模式+DOM去重] %s (需要DOM分析)\n", reason)
+			}
+		}
+		
 		task := Task{
 			URL:   link,
 			Depth: depth,
@@ -2458,6 +2507,13 @@ func (s *Spider) PrintURLPatternDedupReport() {
 	}
 }
 
+// PrintURLPatternDOMDedupReport 打印URL模式+DOM去重报告
+func (s *Spider) PrintURLPatternDOMDedupReport() {
+	if s.urlPatternDOMDedup != nil && s.config.DeduplicationSettings.EnableURLPatternDOMDedup {
+		s.urlPatternDOMDedup.PrintReport()
+	}
+}
+
 // SaveSensitiveInfoToFile 保存敏感信息到文件（独立输出，包含来源URL）
 // ⚠️ 已废弃：建议使用 ExportSensitiveInfoUnified() 统一导出多种格式
 func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
@@ -2505,10 +2561,16 @@ func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
 		file.WriteString("【高危发现】\n")
 		file.WriteString(strings.Repeat("-", 60) + "\n\n")
 		for i, finding := range highFindings {
+			// 🔧 修复: 根据配置决定显示脱敏值还是完整值
+			displayValue := finding.Value
+			if s.config.SensitiveDetectionSettings.SaveFullValue {
+				displayValue = finding.FullValue
+			}
+			
 			file.WriteString(fmt.Sprintf("[%d] %s\n", i+1, finding.Type))
 			file.WriteString(fmt.Sprintf("    来源URL: %s\n", finding.SourceURL))
 			file.WriteString(fmt.Sprintf("    位置: %s\n", finding.Location))
-			file.WriteString(fmt.Sprintf("    值: %s\n", finding.Value))
+			file.WriteString(fmt.Sprintf("    值: %s\n", displayValue))
 			file.WriteString("\n")
 		}
 		file.WriteString("\n")
@@ -2519,10 +2581,16 @@ func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
 		file.WriteString("【中危发现】\n")
 		file.WriteString(strings.Repeat("-", 60) + "\n\n")
 		for i, finding := range mediumFindings {
+			// 🔧 修复: 根据配置决定显示脱敏值还是完整值
+			displayValue := finding.Value
+			if s.config.SensitiveDetectionSettings.SaveFullValue {
+				displayValue = finding.FullValue
+			}
+			
 			file.WriteString(fmt.Sprintf("[%d] %s\n", i+1, finding.Type))
 			file.WriteString(fmt.Sprintf("    来源URL: %s\n", finding.SourceURL))
 			file.WriteString(fmt.Sprintf("    位置: %s\n", finding.Location))
-			file.WriteString(fmt.Sprintf("    值: %s\n", finding.Value))
+			file.WriteString(fmt.Sprintf("    值: %s\n", displayValue))
 			file.WriteString("\n")
 		}
 		file.WriteString("\n")
@@ -2545,9 +2613,15 @@ func (s *Spider) SaveSensitiveInfoToFile(filepath string) error {
 		
 		for findingType, count := range typeCount {
 			example := typeExamples[findingType]
+			// 🔧 修复: 根据配置决定显示脱敏值还是完整值
+			displayValue := example.Value
+			if s.config.SensitiveDetectionSettings.SaveFullValue {
+				displayValue = example.FullValue
+			}
+			
 			file.WriteString(fmt.Sprintf("类型: %s (共 %d 个)\n", findingType, count))
 			file.WriteString(fmt.Sprintf("  示例来源: %s\n", example.SourceURL))
-			file.WriteString(fmt.Sprintf("  示例值: %s\n", example.Value))
+			file.WriteString(fmt.Sprintf("  示例值: %s\n", displayValue))
 			file.WriteString("\n")
 		}
 	}
@@ -2638,6 +2712,39 @@ func (s *Spider) ExportSensitiveInfoUnified(outputDir string, baseFilename strin
 	
 	// 导出所有格式
 	return s.sensitiveManager.ExportAll()
+}
+
+// GetRequestLogger 获取请求日志记录器
+func (s *Spider) GetRequestLogger() *RequestLogger {
+	return s.requestLogger
+}
+
+// GetDuplicateHandler 获取去重处理器（v4.5新增）
+func (s *Spider) GetDuplicateHandler() *DuplicateHandler {
+	return s.duplicateHandler
+}
+
+// SaveRequestLogsToFile 保存请求日志到文件(文本格式)
+func (s *Spider) SaveRequestLogsToFile(filename string) error {
+	if s.requestLogger == nil {
+		return fmt.Errorf("请求日志记录器未初始化")
+	}
+	return s.requestLogger.SaveToFile(filename)
+}
+
+// SaveRequestLogsToJSON 保存请求日志到JSON文件
+func (s *Spider) SaveRequestLogsToJSON(filename string) error {
+	if s.requestLogger == nil {
+		return fmt.Errorf("请求日志记录器未初始化")
+	}
+	return s.requestLogger.SaveToJSON(filename)
+}
+
+// PrintRequestLogsSummary 打印请求日志统计摘要
+func (s *Spider) PrintRequestLogsSummary() {
+	if s.requestLogger != nil {
+		s.requestLogger.PrintSummary()
+	}
 }
 
 // SaveStructureUniqueURLsToFile 保存结构化去重后的URL到文件
