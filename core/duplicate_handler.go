@@ -3,11 +3,13 @@ package core
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"net/url"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // DuplicateHandler 去重处理器
@@ -23,19 +25,30 @@ type DuplicateHandler struct {
 	
 	// 相似度阈值
 	similarityThreshold float64
+	
+	// 🆕 调试统计信息
+	totalChecks   int64
+	duplicateHits int64
+	enableDebug   bool
 }
 
 // NewDuplicateHandler 创建去重处理器实例
 func NewDuplicateHandler(threshold float64) *DuplicateHandler {
-	return &DuplicateHandler{
+	d := &DuplicateHandler{
 		processedURLs:      make(map[string]bool),
 		processedContent:   make(map[string]bool),
 		similarityThreshold: threshold,
+		enableDebug:        true, // 启用调试模式
 	}
+	fmt.Printf("🔧 [去重器] 创建新实例 (地址: %p)\n", d)
+	return d
 }
 
 // IsDuplicateURL 检查URL是否重复
 func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
+	// 🆕 统计检查次数
+	atomic.AddInt64(&d.totalChecks, 1)
+	
 	// 解析URL
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
@@ -47,9 +60,16 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 		defer d.mutex.Unlock()
 		
 		if _, exists := d.processedURLs[hash]; exists {
+			atomic.AddInt64(&d.duplicateHits, 1)
+			if d.enableDebug {
+				fmt.Printf("❌ [去重] 跳过重复URL: %s\n", rawURL)
+			}
 			return true
 		}
 		d.processedURLs[hash] = true
+		if d.enableDebug {
+			fmt.Printf("✅ [去重] 添加新URL: %s (hash: %s)\n", rawURL, hash[:8])
+		}
 		return false
 	}
 	
@@ -91,11 +111,22 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 	
 	// 检查是否已处理过
 	if _, exists := d.processedURLs[hash]; exists {
+		atomic.AddInt64(&d.duplicateHits, 1)
+		if d.enableDebug && strings.Contains(rawURL, "showimage.php") {
+			// 只打印showimage.php的重复信息，避免日志过多
+			fmt.Printf("❌ [去重] 跳过重复URL: %s\n    → 规范化: %s\n    → hash: %s\n", 
+				rawURL, urlKey, hash[:8])
+		}
 		return true
 	}
 	
 	// 添加到已处理集合
 	d.processedURLs[hash] = true
+	if d.enableDebug && strings.Contains(rawURL, "showimage.php") {
+		// 只打印showimage.php的新URL，避免日志过多
+		fmt.Printf("✅ [去重] 添加新URL: %s\n    → 规范化: %s\n    → hash: %s\n", 
+			rawURL, urlKey, hash[:8])
+	}
 	return false
 }
 
@@ -276,4 +307,32 @@ func (d *DuplicateHandler) ClearProcessed() {
 	
 	d.processedURLs = make(map[string]bool)
 	d.processedContent = make(map[string]bool)
+}
+
+// PrintStats 打印统计信息
+func (d *DuplicateHandler) PrintStats() {
+	totalChecks := atomic.LoadInt64(&d.totalChecks)
+	duplicateHits := atomic.LoadInt64(&d.duplicateHits)
+	
+	if totalChecks == 0 {
+		fmt.Println("\n⚠️  [去重器统计] 未进行任何去重检查！")
+		return
+	}
+	
+	dupRate := float64(duplicateHits) / float64(totalChecks) * 100
+	
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("📊 去重器统计信息")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("🔍 总检查次数: %d\n", totalChecks)
+	fmt.Printf("❌ 重复命中: %d\n", duplicateHits)
+	fmt.Printf("✅ 新URL: %d\n", totalChecks-duplicateHits)
+	fmt.Printf("📈 去重率: %.1f%%\n", dupRate)
+	
+	d.mutex.RLock()
+	urlCount := len(d.processedURLs)
+	d.mutex.RUnlock()
+	
+	fmt.Printf("💾 已存储URL数: %d\n", urlCount)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 }
