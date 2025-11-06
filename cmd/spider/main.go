@@ -584,6 +584,12 @@ func main() {
 		}
 	}
 	
+	// 🆕 v4.6: 保存爬取日志（记录每个URL的处理情况）
+	crawlLogFile := baseFilename + "_crawl_log.txt"
+	if err := saveCrawlLog(results, crawlLogFile); err != nil {
+		log.Printf("保存爬取日志失败: %v", err)
+	}
+	
 	// 打印统计信息
 	if !simpleMode {
 		printStats(results, elapsed)
@@ -620,8 +626,14 @@ func main() {
 		// 🆕 v3.6: 打印分层去重统计报告（最终报告）
 		spider.PrintFinalLayeredStats()
 		
-		// 🆕 v4.5: 打印URL模式+DOM去重报告
-		spider.PrintURLPatternDOMDedupReport()
+		// 🆕 v4.7: 打印URL模式限流报告
+		spider.PrintURLPatternLimiterReport()
+		
+		// 🆕 v4.8: 打印三大优化需求报告
+		spider.PrintJSHandlerReport()
+		spider.PrintStaticResourceFilterReport()
+		spider.PrintSimilarURLDedupReport()
+		spider.PrintDOMEmbeddingReport()
 		
 		fmt.Printf("\n[+] 结果已保存到当前目录\n")
 	}
@@ -1603,22 +1615,46 @@ func saveDetailedResults(results []*core.Result, spider *core.Spider, filename s
 	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
 	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
 	
-	// 统计摘要
+	// 🆕 v4.6: 增强统计摘要
 	totalPages := len(results)
 	totalLinks := 0
 	totalForms := 0
 	totalAPIs := 0
 	totalPOST := 0
+	crawledCount := 0     // 实际爬取数
+	skippedCount := 0     // 跳过数
+	errorCount := 0       // 错误数
+	totalResponseTime := int64(0)
 	
 	for _, r := range results {
 		totalLinks += len(r.Links)
 		totalForms += len(r.Forms)
 		totalAPIs += len(r.APIs)
 		totalPOST += len(r.POSTRequests)
+		
+		if r.Crawled {
+			crawledCount++
+			totalResponseTime += r.ResponseTime
+			if r.Error != nil {
+				errorCount++
+			}
+		} else {
+			skippedCount++
+		}
 	}
 	
 	writer.WriteString(fmt.Sprintf("【统计摘要】\n"))
-	writer.WriteString(fmt.Sprintf("  爬取页面数: %d\n", totalPages))
+	writer.WriteString(fmt.Sprintf("  总URL数:     %d\n", totalPages))
+	writer.WriteString(fmt.Sprintf("  实际爬取:   %d (%.1f%%)\n", crawledCount, float64(crawledCount)*100/float64(totalPages)))
+	writer.WriteString(fmt.Sprintf("  跳过:       %d (去重/过滤)\n", skippedCount))
+	if errorCount > 0 {
+		writer.WriteString(fmt.Sprintf("  失败:       %d\n", errorCount))
+	}
+	if crawledCount > 0 {
+		avgTime := totalResponseTime / int64(crawledCount)
+		writer.WriteString(fmt.Sprintf("  平均响应:   %dms\n", avgTime))
+	}
+	writer.WriteString(strings.Repeat("-", 55) + "\n")
 	writer.WriteString(fmt.Sprintf("  发现链接数: %d\n", totalLinks))
 	writer.WriteString(fmt.Sprintf("  发现表单数: %d\n", totalForms))
 	writer.WriteString(fmt.Sprintf("  发现API数:   %d\n", totalAPIs))
@@ -1629,8 +1665,36 @@ func saveDetailedResults(results []*core.Result, spider *core.Spider, filename s
 	for i, result := range results {
 		writer.WriteString(fmt.Sprintf("【页面 %d/%d】\n", i+1, totalPages))
 		writer.WriteString(fmt.Sprintf("URL: %s\n", result.URL))
-		writer.WriteString(fmt.Sprintf("状态码: %d\n", result.StatusCode))
-		writer.WriteString(fmt.Sprintf("内容类型: %s\n", result.ContentType))
+		
+		// 🆕 v4.6: 显示爬取状态
+		if result.Crawled {
+			// 实际爬取了
+			if result.Error != nil {
+				writer.WriteString("爬取状态: ❌ 失败\n")
+				writer.WriteString(fmt.Sprintf("错误信息: %v\n", result.Error))
+			} else {
+				writer.WriteString("爬取状态: ✅ 成功\n")
+			}
+			writer.WriteString(fmt.Sprintf("状态码: %d\n", result.StatusCode))
+			writer.WriteString(fmt.Sprintf("内容类型: %s\n", result.ContentType))
+			if result.ResponseTime > 0 {
+				writer.WriteString(fmt.Sprintf("响应时间: %dms\n", result.ResponseTime))
+			}
+		} else {
+			// 被跳过
+			writer.WriteString("爬取状态: ⏩ 跳过\n")
+			if result.SkipReason != "" {
+				writer.WriteString(fmt.Sprintf("跳过原因: %s\n", result.SkipReason))
+			}
+			// 🆕 v4.7: 显示重复的原始URL和序号
+			if result.DuplicateOfURL != "" {
+				if result.DuplicateOfIndex > 0 {
+					writer.WriteString(fmt.Sprintf("相似URL:  %s (第%d个爬取的页面)\n", result.DuplicateOfURL, result.DuplicateOfIndex))
+				} else {
+					writer.WriteString(fmt.Sprintf("相似URL:  %s\n", result.DuplicateOfURL))
+				}
+			}
+		}
 		
 		// 发现的链接
 		if len(result.Links) > 0 {
@@ -1874,6 +1938,119 @@ func isStaticResource(urlStr string) bool {
 		}
 	}
 	return false
+}
+
+// 🆕 v4.6: saveCrawlLog 保存爬取日志（显示每个URL的处理情况）
+func saveCrawlLog(results []*core.Result, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+	
+	// 文件头
+	writer.WriteString("═══════════════════════════════════════════════════════\n")
+	writer.WriteString("  GogoSpider v4.6 - 爬取日志\n")
+	writer.WriteString("  说明：记录每个URL的详细处理情况\n")
+	writer.WriteString("  生成时间: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
+	writer.WriteString("═══════════════════════════════════════════════════════\n\n")
+	
+	// 统计摘要
+	crawledCount := 0
+	skippedCount := 0
+	errorCount := 0
+	skipReasons := make(map[string]int) // 跳过原因统计
+	
+	for _, r := range results {
+		if r.Crawled {
+			crawledCount++
+			if r.Error != nil {
+				errorCount++
+			}
+		} else {
+			skippedCount++
+			if r.SkipReason != "" {
+				skipReasons[r.SkipReason]++
+			}
+		}
+	}
+	
+	writer.WriteString("【统计摘要】\n")
+	writer.WriteString(fmt.Sprintf("  总URL数:    %d\n", len(results)))
+	writer.WriteString(fmt.Sprintf("  实际爬取:  %d (%.1f%%)\n", crawledCount, float64(crawledCount)*100/float64(len(results))))
+	writer.WriteString(fmt.Sprintf("  跳过:      %d (%.1f%%)\n", skippedCount, float64(skippedCount)*100/float64(len(results))))
+	if errorCount > 0 {
+		writer.WriteString(fmt.Sprintf("  失败:      %d\n", errorCount))
+	}
+	writer.WriteString("\n")
+	
+	// 跳过原因统计
+	if len(skipReasons) > 0 {
+		writer.WriteString("【跳过原因统计】\n")
+		// 按数量排序
+		type reasonCount struct {
+			Reason string
+			Count  int
+		}
+		var reasons []reasonCount
+		for reason, count := range skipReasons {
+			reasons = append(reasons, reasonCount{Reason: reason, Count: count})
+		}
+		sort.Slice(reasons, func(i, j int) bool {
+			return reasons[i].Count > reasons[j].Count
+		})
+		
+		for _, rc := range reasons {
+			writer.WriteString(fmt.Sprintf("  • %s: %d个\n", rc.Reason, rc.Count))
+		}
+		writer.WriteString("\n")
+	}
+	
+	writer.WriteString(strings.Repeat("─", 55) + "\n\n")
+	
+	// 详细日志
+	writer.WriteString("【详细日志】\n\n")
+	
+	for i, result := range results {
+		writer.WriteString(fmt.Sprintf("[%03d] ", i+1))
+		
+		if result.Crawled {
+			if result.Error != nil {
+				writer.WriteString("❌ ")
+			} else {
+				writer.WriteString("✅ ")
+			}
+			writer.WriteString(result.URL + "\n")
+			writer.WriteString(fmt.Sprintf("      状态: %d | 耗时: %dms", result.StatusCode, result.ResponseTime))
+			if result.ContentType != "" {
+				writer.WriteString(fmt.Sprintf(" | 类型: %s", result.ContentType))
+			}
+			writer.WriteString("\n")
+			if result.Error != nil {
+				writer.WriteString(fmt.Sprintf("      错误: %v\n", result.Error))
+			}
+		} else {
+			writer.WriteString("⏩ " + result.URL + "\n")
+			if result.SkipReason != "" {
+				writer.WriteString(fmt.Sprintf("      原因: %s\n", result.SkipReason))
+			}
+			// 🆕 v4.7: 显示重复的原始URL和序号
+			if result.DuplicateOfURL != "" {
+				if result.DuplicateOfIndex > 0 {
+					writer.WriteString(fmt.Sprintf("      相似: %s [第%d个]\n", result.DuplicateOfURL, result.DuplicateOfIndex))
+				} else {
+					writer.WriteString(fmt.Sprintf("      相似: %s\n", result.DuplicateOfURL))
+				}
+			}
+		}
+		writer.WriteString("\n")
+	}
+	
+	fmt.Printf("  ✅ 爬取日志: %s (%d条记录)\n", filename, len(results))
+	return nil
 }
 
 // saveAllDiscoveredURLs 🔧 修复：保存所有发现的URL（包括未爬取的静态资源和外部链接）

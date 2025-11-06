@@ -12,6 +12,13 @@ import (
 	"sync/atomic"
 )
 
+// URLInfo URL信息
+type URLInfo struct {
+	URL       string // 原始URL
+	Index     int    // 序号（在results中的索引，从1开始）
+	IsCrawled bool   // 是否真正被爬取过（不是仅仅被发现）
+}
+
 // DuplicateHandler 去重处理器
 type DuplicateHandler struct {
 	// 🔧 修复：添加互斥锁保护并发访问
@@ -19,6 +26,9 @@ type DuplicateHandler struct {
 	
 	// 已处理URL的哈希集合
 	processedURLs map[string]bool
+	
+	// 🆕 v4.7: 哈希到URL信息的映射（包含原始URL、序号和爬取状态）
+	hashToInfo map[string]*URLInfo
 	
 	// 已处理内容的哈希集合
 	processedContent map[string]bool
@@ -35,10 +45,11 @@ type DuplicateHandler struct {
 // NewDuplicateHandler 创建去重处理器实例
 func NewDuplicateHandler(threshold float64) *DuplicateHandler {
 	d := &DuplicateHandler{
-		processedURLs:      make(map[string]bool),
-		processedContent:   make(map[string]bool),
+		processedURLs:       make(map[string]bool),
+		hashToInfo:          make(map[string]*URLInfo),
+		processedContent:    make(map[string]bool),
 		similarityThreshold: threshold,
-		enableDebug:        true, // 启用调试模式
+		enableDebug:         true, // 启用调试模式
 	}
 	fmt.Printf("🔧 [去重器] 创建新实例 (地址: %p)\n", d)
 	return d
@@ -46,6 +57,58 @@ func NewDuplicateHandler(threshold float64) *DuplicateHandler {
 
 // IsDuplicateURL 检查URL是否重复
 func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
+	isDup, _ := d.IsDuplicateURLWithOriginal(rawURL)
+	return isDup
+}
+
+// MarkURLAsStarted 标记URL开始爬取（在OnRequest时调用）
+func (d *DuplicateHandler) MarkURLAsStarted(rawURL string) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	
+	// 解析URL并计算hash
+	parsedURL, err := url.Parse(rawURL)
+	var hash string
+	if err != nil {
+		hash = d.calculateMD5(rawURL)
+	} else {
+		urlKey := parsedURL.Scheme + "://" + parsedURL.Host + parsedURL.Path
+		if parsedURL.RawQuery != "" {
+			queryParams := parsedURL.Query()
+			var paramKeys []string
+			for key := range queryParams {
+				paramKeys = append(paramKeys, key)
+			}
+			sort.Strings(paramKeys)
+			
+			var queryParts []string
+			for _, key := range paramKeys {
+				for _, value := range queryParams[key] {
+					queryParts = append(queryParts, key+"="+value)
+				}
+			}
+			if len(queryParts) > 0 {
+				urlKey += "?" + strings.Join(queryParts, "&")
+			}
+		}
+		hash = d.calculateMD5(urlKey)
+	}
+	
+	// 如果URL不存在，添加到去重器（标记为开始爬取）
+	if _, exists := d.processedURLs[hash]; !exists {
+		d.processedURLs[hash] = true
+		d.hashToInfo[hash] = &URLInfo{
+			URL:       rawURL,
+			Index:     0,
+			IsCrawled: false,
+		}
+	}
+}
+
+// 🆕 v4.7: IsDuplicateURLWithOriginal 检查URL是否重复，并返回重复的URL信息
+// 返回: (是否重复, 重复的URL信息)
+// 注意：此方法只检查，不添加！
+func (d *DuplicateHandler) IsDuplicateURLWithOriginal(rawURL string) (bool, *URLInfo) {
 	// 🆕 统计检查次数
 	atomic.AddInt64(&d.totalChecks, 1)
 	
@@ -64,13 +127,11 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 			if d.enableDebug {
 				fmt.Printf("❌ [去重] 跳过重复URL: %s\n", rawURL)
 			}
-			return true
+			info := d.hashToInfo[hash]
+			return true, info
 		}
-		d.processedURLs[hash] = true
-		if d.enableDebug {
-			fmt.Printf("✅ [去重] 添加新URL: %s (hash: %s)\n", rawURL, hash[:8])
-		}
-		return false
+		// 🔧 v4.7: 不在检查时添加，只检查不添加
+		return false, nil
 	}
 	
 	// 构造用于去重检查的URL键值
@@ -112,22 +173,17 @@ func (d *DuplicateHandler) IsDuplicateURL(rawURL string) bool {
 	// 检查是否已处理过
 	if _, exists := d.processedURLs[hash]; exists {
 		atomic.AddInt64(&d.duplicateHits, 1)
+		info := d.hashToInfo[hash]
 		if d.enableDebug && strings.Contains(rawURL, "showimage.php") {
 			// 只打印showimage.php的重复信息，避免日志过多
-			fmt.Printf("❌ [去重] 跳过重复URL: %s\n    → 规范化: %s\n    → hash: %s\n", 
-				rawURL, urlKey, hash[:8])
+			fmt.Printf("❌ [去重] 跳过重复URL: %s\n    → 规范化: %s\n    → hash: %s\n    → 原始URL: %s (序号:%d, 已爬取:%v)\n", 
+				rawURL, urlKey, hash[:8], info.URL, info.Index, info.IsCrawled)
 		}
-		return true
+		return true, info
 	}
 	
-	// 添加到已处理集合
-	d.processedURLs[hash] = true
-	if d.enableDebug && strings.Contains(rawURL, "showimage.php") {
-		// 只打印showimage.php的新URL，避免日志过多
-		fmt.Printf("✅ [去重] 添加新URL: %s\n    → 规范化: %s\n    → hash: %s\n", 
-			rawURL, urlKey, hash[:8])
-	}
-	return false
+	// 🔧 v4.7: 不在检查时添加，只检查不添加
+	return false, nil
 }
 
 // IsDuplicateContent 检查内容是否重复
@@ -299,6 +355,53 @@ func (d *DuplicateHandler) calculateFeatureSimilarity(features1, features2 map[s
 	return similarity
 }
 
+// 🆕 v4.7: UpdateURLInfo 更新URL信息（标记为已爬取并设置序号）
+func (d *DuplicateHandler) UpdateURLInfo(rawURL string, index int, isCrawled bool) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	
+	// 解析URL并计算hash（与IsDuplicateURLWithOriginal中的逻辑一致）
+	parsedURL, err := url.Parse(rawURL)
+	var hash string
+	if err != nil {
+		hash = d.calculateMD5(rawURL)
+	} else {
+		urlKey := parsedURL.Scheme + "://" + parsedURL.Host + parsedURL.Path
+		if parsedURL.RawQuery != "" {
+			queryParams := parsedURL.Query()
+			var paramKeys []string
+			for key := range queryParams {
+				paramKeys = append(paramKeys, key)
+			}
+			sort.Strings(paramKeys)
+			
+			var queryParts []string
+			for _, key := range paramKeys {
+				for _, value := range queryParams[key] {
+					queryParts = append(queryParts, key+"="+value)
+				}
+			}
+			if len(queryParts) > 0 {
+				urlKey += "?" + strings.Join(queryParts, "&")
+			}
+		}
+		hash = d.calculateMD5(urlKey)
+	}
+	
+	// 更新URL信息
+	if info, exists := d.hashToInfo[hash]; exists {
+		// 🔧 v4.7: 只更新序号和状态（如果提供）
+		// 如果Index > 0，则更新序号
+		if index > 0 {
+			info.Index = index
+		}
+		// IsCrawled只能从false变成true，不能反向（一旦爬取成功就永远是true）
+		if isCrawled {
+			info.IsCrawled = true
+		}
+	}
+}
+
 // ClearProcessed 清空已处理记录
 func (d *DuplicateHandler) ClearProcessed() {
 	// 🔧 修复：加锁保护并发访问
@@ -306,6 +409,7 @@ func (d *DuplicateHandler) ClearProcessed() {
 	defer d.mutex.Unlock()
 	
 	d.processedURLs = make(map[string]bool)
+	d.hashToInfo = make(map[string]*URLInfo)
 	d.processedContent = make(map[string]bool)
 }
 

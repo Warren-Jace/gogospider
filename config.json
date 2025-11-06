@@ -78,13 +78,22 @@
     "max_param_value_variants_per_group": 3,
     "_优化_3": "从10降低到3，每种参数模式最多爬取3个变体",
     
-    "_v4.5_新功能": "✅ URL模式+DOM相似度去重（更精准的去重策略）",
-    "enable_url_pattern_dom_dedup": true,
-    "_url_pattern_dom_说明": "对URL相似的请求先采样3次验证DOM相似度，避免误判",
-    "url_pattern_dom_sample_count": 3,
-    "_sample_count_说明": "采样次数，默认3次验证",
-    "url_pattern_dom_threshold": 0.85,
-    "_threshold_说明": "DOM相似度阈值，默认85%",
+    "_v4.8_三大优化需求": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "enable_js_special_handling": true,
+    "_js_特殊处理_说明": "✅ JS文件不受scope限制，可跨域爬取（CDN、第三方库等）",
+    
+    "enable_static_resource_filter": true,
+    "_静态资源过滤_说明": "✅ 图片、CSS、字体等只记录不请求，注意：?file=test.css不算静态资源",
+    
+    "enable_similar_url_dedup": true,
+    "_相似URL去重_说明": "✅ 参数不同(?t=a vs ?t=b)和路径变量(/test-1/ vs /test-2/)视为相似，使用Hash去重",
+    
+    "enable_dom_embedding": true,
+    "_DOM_Embedding_说明": "✅ 基于向量embedding的内容去重，hash×深度×权重，余弦相似度计算",
+    "dom_embedding_dimensions": 256,
+    "_embedding_维度_说明": "向量维度，默认256维（维度越大越精确但占内存）",
+    "dom_embedding_threshold": 0.85,
+    "_embedding_阈值_说明": "相似度阈值，默认85%",
     
     "enable_business_aware_filter": true,
     "business_filter_min_score": 30.0,

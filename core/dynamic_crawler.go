@@ -123,6 +123,9 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 	chromeCtx, cancelChrome := chromedp.NewContext(allocCtx)
 	defer cancelChrome()
 
+	// 🆕 v4.6: 记录开始时间用于计算响应时间
+	startTime := time.Now()
+	
 	result := &Result{
 		URL:          targetURL.String(),
 		Links:        make([]string, 0),
@@ -130,11 +133,22 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		Forms:        make([]Form, 0),
 		APIs:         make([]string, 0),
 		POSTRequests: make([]POSTRequest, 0),
+		
+		// 🆕 v4.6: 爬取状态初始化
+		Crawled:      false, // 默认未爬取
+		SkipReason:       "",
+		DuplicateOfURL:   "",
+		DuplicateOfIndex: 0,
+		Error:        nil,
+		ResponseTime: 0,
 	}
 
 	// 检查域名范围限制
 	if d.config != nil && d.config.StrategySettings.DomainScope != "" {
 		if !strings.Contains(targetURL.Host, d.config.StrategySettings.DomainScope) {
+			// 🆕 v4.6: 标记跳过原因
+			result.Crawled = false
+			result.SkipReason = fmt.Sprintf("超出域名范围 (允许: %s)", d.config.StrategySettings.DomainScope)
 			fmt.Printf("URL超出域名范围，不进行动态爬取: %s\n", targetURL.String())
 			return result, nil
 		}
@@ -159,7 +173,12 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("导航到页面失败: %v", err)
+		// 🆕 v4.6: 标记为爬取失败
+		result.Crawled = true
+		result.Error = err
+		result.SkipReason = fmt.Sprintf("导航失败: %v", err)
+		result.ResponseTime = time.Since(startTime).Milliseconds()
+		return result, fmt.Errorf("导航到页面失败: %v", err)
 	}
 
 	// 尝试等待body可见，但如果失败也继续（有些页面可能没有body）
@@ -453,9 +472,17 @@ func (d *DynamicCrawlerImpl) Crawl(targetURL *url.URL) (*Result, error) {
 		chromedp.Evaluate(`document.contentType`, &contentType),
 	)
 
+	// 🆕 v4.6: 标记为成功爬取并记录响应时间
+	result.Crawled = true
+	result.ResponseTime = time.Since(startTime).Milliseconds()
+	
 	if err == nil {
 		result.StatusCode = int(statusCode)
 		result.ContentType = contentType
+	} else {
+		// 即使获取状态码失败，也认为爬取成功（已获取HTML内容）
+		result.StatusCode = 200 // 默认200
+		result.ContentType = "text/html"
 	}
 
 	// 保存HTML内容供后续检测使用

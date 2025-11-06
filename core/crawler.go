@@ -25,6 +25,14 @@ type Result struct {
 	// DOM相似度检测
 	IsSimilar    bool   // 是否与已爬取的页面相似
 	SimilarToURL string // 相似的页面URL
+	
+	// 🆕 v4.6: 爬取状态跟踪（修复状态码为0的问题）
+	Crawled          bool   // 是否实际发送了HTTP请求（false表示被去重/过滤跳过）
+	SkipReason       string // 跳过原因（如果Crawled=false）
+	DuplicateOfURL   string // 🆕 v4.7: 重复的原始URL（当SkipReason为URL去重时有效）
+	DuplicateOfIndex int    // 🆕 v4.7: 重复URL的序号（在results中的位置，从1开始）
+	Error            error  // 爬取错误信息（如果有）
+	ResponseTime     int64  // 响应时间（毫秒）
 }
 
 // POSTRequest POST请求数据
@@ -86,6 +94,7 @@ type SpiderRecorder interface {
 	GetResourceClassifier() *ResourceClassifier
 	GetRequestLogger() *RequestLogger // 🆕 v4.4: 获取请求日志记录器
 	GetDuplicateHandler() *DuplicateHandler // 🆕 v4.5: 获取去重处理器（修复多实例问题）
+	GetURLPatternLimiter() *URLPatternLimiter // 🆕 v4.7: 获取URL模式限流器
 }
 
 // StaticCrawler 静态爬虫接口

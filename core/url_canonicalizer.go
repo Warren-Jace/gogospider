@@ -111,7 +111,11 @@ func (c *URLCanonicalizer) CanonicalizeURL(rawURL string) (string, error) {
 		pathStr = "/" + pathStr
 	}
 
-	// 4.3 Percent-decoding规范化
+	// 4.3 🔧 修复：先解码再编码，统一URL编码格式
+	if decodedPath, err := url.PathUnescape(pathStr); err == nil {
+		pathStr = decodedPath
+	}
+	// 4.4 Percent-encoding规范化
 	pathStr = normalizePercentEncoding(pathStr)
 
 	// 5. 处理查询参数
@@ -126,12 +130,26 @@ func (c *URLCanonicalizer) CanonicalizeURL(rawURL string) (string, error) {
 		}
 	}
 
-	// 5.2 参数排序
+	// 5.2 🔧 修复：统一参数值的编码（解码后重新编码）
+	normalizedQuery := url.Values{}
+	for key, values := range query {
+		for _, val := range values {
+			// 解码参数值
+			decodedVal, err := url.QueryUnescape(val)
+			if err != nil {
+				// 解码失败，使用原值
+				decodedVal = val
+			}
+			normalizedQuery.Add(key, decodedVal)
+		}
+	}
+
+	// 5.3 参数排序
 	var queryStr string
 	if c.sortQueryParams {
-		queryStr = sortQueryString(query)
+		queryStr = sortQueryString(normalizedQuery)
 	} else {
-		queryStr = query.Encode()
+		queryStr = normalizedQuery.Encode()
 	}
 
 	// 6. 重组URL

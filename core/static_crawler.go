@@ -105,11 +105,22 @@ func (s *StaticCrawlerImpl) SetSpider(spider SpiderRecorder) {
 func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	result := &Result{
 		URL:          startURL.String(),
+		StatusCode:   0,  // 初始值：如果未爬取则保持0
+		ContentType:  "",  // 初始值：如果未爬取则保持空
 		Links:        make([]string, 0),
 		Assets:       make([]string, 0),
 		Forms:        make([]Form, 0),
 		APIs:         make([]string, 0),
 		POSTRequests: make([]POSTRequest, 0),
+		Headers:      make(map[string]string),
+		
+		// 🆕 v4.6: 爬取状态初始化
+		Crawled:      false, // 默认未爬取，在OnResponse中设为true
+		SkipReason:       "",
+		DuplicateOfURL:   "",
+		DuplicateOfIndex: 0,
+		Error:        nil,
+		ResponseTime: 0,
 	}
 	
 	// 为每次Crawl创建新的collector实例，避免WaitGroup重用问题
@@ -134,18 +145,38 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	
 	// 设置请求前回调，实现User-Agent轮换、域名范围检查和Cookie应用
 	collector.OnRequest(func(r *colly.Request) {
-		// 🆕 v4.5: 在Colly层面阻止重复请求（关键修复！）
-		// 必须在OnRequest最开始就检查，避免发起HTTP请求
-		if s.duplicateHandler != nil && s.duplicateHandler.IsDuplicateURL(r.URL.String()) {
-			// URL已经被访问过，中止本次请求
-			r.Abort()
-			return
+		// 🆕 v4.7: 在Colly层面阻止重复请求（关键修复！）
+		// 步骤1：检查URL是否重复
+		if s.duplicateHandler != nil {
+			isDup, urlInfo := s.duplicateHandler.IsDuplicateURLWithOriginal(r.URL.String())
+			if isDup {
+				// 检测到重复，标记跳过原因
+				result.Crawled = false
+				if urlInfo != nil && urlInfo.IsCrawled {
+					// 只有真正被爬取过的URL才显示为"相似URL"
+					result.DuplicateOfURL = urlInfo.URL
+					result.DuplicateOfIndex = urlInfo.Index
+					result.SkipReason = fmt.Sprintf("URL去重 - 与已爬取URL相似: %s", urlInfo.URL)
+				} else {
+					// URL存在但未爬取完成（可能正在爬取中）
+					result.SkipReason = "URL去重 - 已在爬取队列中"
+				}
+				r.Abort()
+				return
+			}
+			
+			// 步骤2：URL不重复，标记为开始爬取
+			s.duplicateHandler.MarkURLAsStarted(r.URL.String())
 		}
 		
 		// 检查域名范围限制
 		if s.config.StrategySettings.DomainScope != "" {
 			requestURL, err := url.Parse(r.URL.String())
 			if err != nil {
+				// 🆕 v4.6: 标记跳过原因
+				result.Crawled = false
+				result.SkipReason = fmt.Sprintf("URL解析失败: %v", err)
+				result.Error = err
 				fmt.Printf("解析URL失败 %s: %v\n", r.URL.String(), err)
 				r.Abort()
 				return
@@ -153,6 +184,9 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			
 			// 检查是否在允许的域名范围内
 			if !strings.Contains(requestURL.Host, s.config.StrategySettings.DomainScope) {
+				// 🆕 v4.6: 标记跳过原因
+				result.Crawled = false
+				result.SkipReason = fmt.Sprintf("超出域名范围 (允许: %s)", s.config.StrategySettings.DomainScope)
 				fmt.Printf("URL超出域名范围，已记录但不爬取: %s\n", r.URL.String())
 				// 记录外部链接但不发送请求
 				r.Abort()
@@ -680,20 +714,43 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	
 	// 设置响应回调
 	collector.OnResponse(func(r *colly.Response) {
-		result.StatusCode = r.StatusCode
-		result.ContentType = r.Headers.Get("Content-Type")
+		// 🆕 v4.6: 标记为成功爬取
+		result.Crawled = true
+		result.SkipReason = "" // 清空跳过原因
 		
-	// 🆕 v4.4: 记录响应日志（修复：计算实际响应时间）
+		// 🔧 v4.7: 立即更新URL状态，避免并发时序问题
+		// 必须在OnResponse时立即更新，不能延迟到addResult
+		if s.duplicateHandler != nil && r != nil {
+			// 注意：这里暂时不设置序号（序号需要在addResult时设置）
+			// 但先标记为已爬取，这样并发的重复请求能正确识别
+			s.duplicateHandler.UpdateURLInfo(r.Request.URL.String(), 0, true)
+		}
+		
+		// 🔧 修复：确保状态码和Content-Type正确赋值
+		if r != nil {
+			result.StatusCode = r.StatusCode
+			if r.Headers != nil {
+				result.ContentType = r.Headers.Get("Content-Type")
+			}
+			// 如果StatusCode为0，可能是网络错误，使用500标记
+			if result.StatusCode == 0 {
+				result.StatusCode = 500
+			}
+		}
+		
+	// 🆕 v4.6: 计算并记录响应时间
+	var responseTime int64 = 0
+	if startTime := r.Request.Ctx.GetAny("request_start_time"); startTime != nil {
+		if t, ok := startTime.(time.Time); ok {
+			responseTime = time.Since(t).Milliseconds()
+			result.ResponseTime = responseTime // 保存到Result中
+		}
+	}
+		
+	// 🆕 v4.4: 记录响应日志
 	if s.spider != nil {
 		logger := s.spider.GetRequestLogger()
 		if logger != nil && logger.IsEnabled() {
-			// 计算响应时间
-			var responseTime int64 = 0
-			if startTime := r.Request.Ctx.GetAny("request_start_time"); startTime != nil {
-				if t, ok := startTime.(time.Time); ok {
-					responseTime = time.Since(t).Milliseconds()
-				}
-			}
 			logger.LogResponse(r.Request.URL.String(), r.StatusCode, responseTime, nil)
 		}
 	}
@@ -781,9 +838,28 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 	
 	// 设置错误回调
 	collector.OnError(func(r *colly.Response, err error) {
+		// 🆕 v4.6: 标记为爬取失败并记录错误
+		result.Crawled = true // 已尝试爬取
+		result.Error = err
+		if r != nil && r.StatusCode > 0 {
+			result.StatusCode = r.StatusCode
+			result.SkipReason = fmt.Sprintf("HTTP错误: %d", r.StatusCode)
+		} else {
+			result.SkipReason = fmt.Sprintf("请求失败: %v", err)
+		}
+		
 		fmt.Printf("请求错误 %s: %v\n", r.Request.URL, err)
 		
-	// 🆕 v4.4: 记录错误日志（修复：计算实际响应时间）
+	// 🆕 v4.6: 计算并记录响应时间（即使失败）
+	var responseTime int64 = 0
+	if startTime := r.Request.Ctx.GetAny("request_start_time"); startTime != nil {
+		if t, ok := startTime.(time.Time); ok {
+			responseTime = time.Since(t).Milliseconds()
+			result.ResponseTime = responseTime
+		}
+	}
+		
+	// 🆕 v4.4: 记录错误日志
 	if s.spider != nil {
 		logger := s.spider.GetRequestLogger()
 		if logger != nil && logger.IsEnabled() {
@@ -791,15 +867,6 @@ func (s *StaticCrawlerImpl) Crawl(startURL *url.URL) (*Result, error) {
 			if r != nil {
 				statusCode = r.StatusCode
 			}
-			
-			// 计算响应时间
-			var responseTime int64 = 0
-			if startTime := r.Request.Ctx.GetAny("request_start_time"); startTime != nil {
-				if t, ok := startTime.(time.Time); ok {
-					responseTime = time.Since(t).Milliseconds()
-				}
-			}
-			
 			logger.LogResponse(r.Request.URL.String(), statusCode, responseTime, err)
 		}
 	}
@@ -889,6 +956,22 @@ func (s *StaticCrawlerImpl) generatePOSTRequestFromForm(form *Form, enctype stri
 // addLinkWithFilter 添加链接到结果，应用所有过滤器（v4.0统一入口）
 // 这是添加链接的唯一正确方式，确保所有过滤器都被应用
 func (s *StaticCrawlerImpl) addLinkWithFilter(result *Result, rawURL string, absoluteURL string) bool {
+	// 🆕 v4.7: URL模式限流（最高优先级，避免资源浪费）
+	if s.spider != nil {
+		limiter := s.spider.GetURLPatternLimiter()
+		if limiter != nil {
+			shouldCrawl, reason, info := limiter.ShouldCrawl(absoluteURL)
+			if !shouldCrawl {
+				// 被限流，记录调试信息
+				if info != nil && info.SkippedCount <= 3 {
+					// 只打印每个模式前3个被跳过的URL
+					fmt.Printf("  [模式限流] %s\n", reason)
+				}
+				return false
+			}
+		}
+	}
+	
 	// 质量过滤（第一道防线）
 	if s.urlQualityFilter != nil {
 		if valid, _ := s.urlQualityFilter.IsHighQualityURL(absoluteURL); !valid {

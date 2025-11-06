@@ -78,6 +78,7 @@ type Spider struct {
 	urlDeduplicator     *URLDeduplicator        // URL去重器（忽略参数值）
 	urlStructureDedup   *URLStructureDeduplicator // URL结构化去重器（路径变量+参数）
 	priorityScheduler   *URLPriorityScheduler   // 优先级调度器（可选）
+	urlPatternLimiter   *URLPatternLimiter      // 🆕 v4.7: URL模式限流器（限制相同模式URL数量）
 	
 	// 🆕 v3.2 新增组件
 	cookieManager      *CookieManager      // Cookie管理器
@@ -94,9 +95,6 @@ type Spider struct {
 	// 🆕 v3.6 新增组件 - 分层去重策略
 	layeredDedup       *LayeredDeduplicator     // 分层去重器（智能分类去重）
 	
-	// 🆕 v4.5: URL模式+DOM相似度去重器
-	urlPatternDOMDedup *URLPatternWithDOMDeduplicator // URL模式+DOM去重器（采样验证策略）
-	
 	// 🆕 v4.2: URL规范化器（专家修复方案）
 	urlCanonicalizer   *URLCanonicalizer        // URL规范化器（IDN、去重斜杠、tracking过滤）
 	
@@ -108,6 +106,12 @@ type Spider struct {
 	hybridDedup        *HybridDeduplicator        // 混合去重器(Bloom+LRU)
 	perfStats          *PerformanceStats          // 性能统计
 	enableOptimizations bool                      // 是否启用性能优化
+	
+	// 🆕 v4.8: 三大优化需求组件
+	jsHandler            *JSSpecialHandler         // JS文件特殊处理器（跨域+拼接）
+	staticResourceFilter *StaticResourceFilter     // 静态资源过滤器（除JS外只记录）
+	similarURLDedup      *SimilarURLDeduplicator   // 相似URL去重器（hash算法）
+	domEmbeddingDedup    *DOMEmbeddingDeduplicator // DOM Embedding去重器
 
 	results           []*Result
 	degradedURLs      []string         // 降级的URL（记录但不爬取）
@@ -211,12 +215,6 @@ func NewSpider(cfg *config.Config) *Spider {
 		// 🆕 v3.6: 初始化分层去重器
 		layeredDedup:      NewLayeredDeduplicator(),       // 分层去重器（智能分类去重）
 		
-		// 🆕 v4.5: 初始化URL模式+DOM去重器
-		urlPatternDOMDedup: NewURLPatternWithDOMDeduplicator(
-			cfg.DeduplicationSettings.URLPatternDOMSampleCount,
-			cfg.DeduplicationSettings.URLPatternDOMThreshold,
-		), // URL模式+DOM去重器（采样验证策略）
-		
 		// 🆕 v4.2: 初始化URL规范化器
 		urlCanonicalizer:  NewURLCanonicalizer(),          // URL规范化器（专家修复方案）
 		
@@ -233,6 +231,18 @@ func NewSpider(cfg *config.Config) *Spider {
 		urlDeduplicator:    NewURLDeduplicator(),         // URL去重器
 		urlStructureDedup:  NewURLStructureDeduplicator(), // URL结构化去重器
 		priorityScheduler:  nil,                           // 将在Start中初始化（可选，需要配置）
+		urlPatternLimiter:  NewURLPatternLimiter(PatternLimiterConfig{ // 🆕 v4.7: URL模式限流器
+			MaxURLsPerPattern: 3,  // 默认每个模式最多爬3个
+			EnableSmartMode:   true,
+			SampleSize:        5,
+			WeightedLimits: map[string]int{
+				"api":    5,  // API端点多爬几个
+				"form":   5,  // 表单相关
+				"image":  2,  // 图片只爬2个
+				"static": 1,  // 静态资源只爬1个
+				"normal": 3,  // 普通页面3个
+			},
+		}),
 		
 		// 🆕 v3.2 新增组件
 		cookieManager:     NewCookieManager(),      // Cookie管理器
@@ -241,6 +251,12 @@ func NewSpider(cfg *config.Config) *Spider {
 		
 		// 🆕 v3.4 新增组件
 		adaptiveLearner:   nil,                     // 将在Start中初始化（如果启用）
+		
+		// 🆕 v4.8: 初始化三大优化需求组件
+		jsHandler:            nil,                                              // 将在Start中初始化（需要目标URL和黑名单）
+		staticResourceFilter: NewStaticResourceFilter(cfg.ScopeSettings.ExcludeExtensions), // 静态资源过滤器
+		similarURLDedup:      NewSimilarURLDeduplicator(),                      // 相似URL去重器
+		domEmbeddingDedup:    NewDOMEmbeddingDeduplicator(256, 0.85),          // DOM Embedding去重器（256维，85%阈值）
 
 		hiddenPathDiscovery: nil, // 将在Start方法中初始化，需要用户代理
 		results:             make([]*Result, 0),
@@ -380,6 +396,15 @@ func (s *Spider) Start(targetURL string) error {
 		return fmt.Errorf("无效的URL: %v", err)
 	}
 	s.targetDomain = parsedURL.Host
+	
+	// 🆕 v4.8: 初始化JS特殊处理器（需要目标URL）
+	jsHandler, err := NewJSSpecialHandler(targetURL, s.config.BlacklistSettings.Domains)
+	if err != nil {
+		s.logger.Warn("JS处理器初始化失败", "error", err)
+	} else {
+		s.jsHandler = jsHandler
+		s.logger.Info("JS特殊处理器已启用", "target", targetURL)
+	}
 	
 	// 🆕 v4.2: 初始化URL过滤管理器（在targetDomain设置后）
 	if s.config.FilterSettings.Enabled && s.filterManager == nil {
@@ -717,44 +742,22 @@ func (s *Spider) addResult(result *Result) {
 		}
 	}
 	
-	// 🆕 将域内URL添加到去重器（只添加目标域名的URL）
-	if s.urlDeduplicator != nil && result != nil {
-		// 添加当前页面URL
+	// 🆕 v4.7: 只将真正被爬取的URL添加到去重器
+	// 重要：不再将未爬取的发现链接添加到去重器，避免误判
+	if s.urlDeduplicator != nil && result != nil && result.Crawled {
+		// 只添加当前页面URL（真正爬取过的）
 		if result.URL != "" && s.isInTargetDomain(result.URL) {
 			s.urlDeduplicator.AddURL(result.URL)
 		}
-		
-		// 添加发现的所有链接（只添加域内的）
-		if len(result.Links) > 0 {
-			for _, link := range result.Links {
-				if s.isInTargetDomain(link) {
-					s.urlDeduplicator.AddURL(link)
-				}
-			}
-		}
-		
-		// 添加API端点（只添加域内的）
-		if len(result.APIs) > 0 {
-			for _, api := range result.APIs {
-				if s.isInTargetDomain(api) {
-					s.urlDeduplicator.AddURL(api)
-				}
-			}
-		}
-		
-		// 添加表单action（只添加域内的）
-		for _, form := range result.Forms {
-			if form.Action != "" && s.isInTargetDomain(form.Action) {
-				s.urlDeduplicator.AddURL(form.Action)
-			}
-		}
-		
-		// 添加POST请求URL（只添加域内的）
-		for _, postReq := range result.POSTRequests {
-			if postReq.URL != "" && s.isInTargetDomain(postReq.URL) {
-				s.urlDeduplicator.AddURL(postReq.URL)
-			}
-		}
+	}
+	
+	// 🆕 v4.7: 更新DuplicateHandler中的URL序号
+	// 注意：IsCrawled状态已经在OnResponse时更新，这里只更新序号
+	if s.duplicateHandler != nil && result != nil && result.Crawled {
+		// 序号 = 当前results数组长度 + 1（因为还没添加到数组中）
+		index := len(s.results) + 1
+		// 只更新序号，保持IsCrawled状态不变（在OnResponse时已设为true）
+		s.duplicateHandler.UpdateURLInfo(result.URL, index, true)
 	}
 
 	// 如果有HTML内容，先进行DOM相似度检测
@@ -771,12 +774,16 @@ func (s *Spider) addResult(result *Result) {
 		}
 	}
 	
-	// 🆕 v4.5: URL模式+DOM相似度去重 - 记录DOM签名
-	if result.HTMLContent != "" && s.config.DeduplicationSettings.EnableURLPatternDOMDedup && s.urlPatternDOMDedup != nil {
-		if err := s.urlPatternDOMDedup.RecordDOMSignature(result.URL, result.HTMLContent); err != nil {
-			s.logger.Warn("记录DOM签名失败",
-				"url", result.URL,
-				"error", err.Error())
+	// 🆕 v4.8: DOM Embedding相似度检测（基于向量embedding）
+	if result.HTMLContent != "" && s.domEmbeddingDedup != nil {
+		isSimilar, similarURL, similarity := s.domEmbeddingDedup.CheckSimilarity(result.URL, result.HTMLContent)
+		if isSimilar {
+			fmt.Printf("  [DOM Embedding] 内容相似页面！相似度: %.1f%%, 相似于: %s\n",
+				similarity*100, similarURL)
+			// 记录相似信息（不影响当前爬取）
+			if result.SkipReason == "" {
+				result.SkipReason = fmt.Sprintf("DOM Embedding相似(%.1f%%): %s", similarity*100, similarURL)
+			}
 		}
 	}
 
@@ -1626,6 +1633,52 @@ func (s *Spider) collectLinksForLayer(targetDepth int) []string {
 	skippedByLoginWall := 0 // 🆕 v3.2 统计登录墙跳过的数量
 	
 	for link := range allLinks {
+		// 🆕 v4.8: Step 0 - JS文件特殊处理（最高优先级）
+		if s.jsHandler != nil {
+			shouldProcess, processedURL, reason := s.jsHandler.ShouldProcessJS(link)
+			if shouldProcess {
+				// JS文件直接允许，跳过Scope检查
+				tasksToSubmit = append(tasksToSubmit, processedURL)
+				s.logger.Debug("JS文件特殊处理", 
+					"original", link,
+					"processed", processedURL,
+					"reason", reason)
+				continue
+			}
+			// 如果不是JS文件，继续正常流程
+		}
+		
+		// 🆕 v4.8: Step 1 - 静态资源过滤（除JS外）
+		if s.staticResourceFilter != nil {
+			shouldFilter, resType, reason := s.staticResourceFilter.ShouldFilter(link)
+			if shouldFilter {
+				// 只记录不请求
+				skippedByResourceType++
+				if skippedByResourceType <= 5 {
+					s.logger.Debug("静态资源过滤", 
+						"url", link,
+						"type", resType,
+						"reason", reason)
+				}
+				continue
+			}
+		}
+		
+		// 🆕 v4.8: Step 2 - 相似URL去重（Hash算法）
+		if s.similarURLDedup != nil {
+			shouldCrawl, similarURL, reason := s.similarURLDedup.ShouldCrawl(link)
+			if !shouldCrawl {
+				skippedByPattern++
+				if skippedByPattern <= 5 {
+					s.logger.Debug("相似URL跳过",
+						"url", link,
+						"similar_to", similarURL,
+						"reason", reason)
+				}
+				continue
+			}
+		}
+		
 		// 🆕 v4.3: 使用优化的上下文 (URL只解析一次)
 		var ctx *OptimizedFilterContext
 		if s.enableOptimizations {
@@ -1890,18 +1943,7 @@ func (s *Spider) crawlLayer(links []string, depth int) []*Result {
 
 	// 提交所有任务
 	for _, link := range links {
-		// 🆕 v4.5: URL模式+DOM相似度去重检查
-		if s.config.DeduplicationSettings.EnableURLPatternDOMDedup && s.urlPatternDOMDedup != nil {
-			shouldCrawl, reason, needsDOMAnalysis := s.urlPatternDOMDedup.ShouldCrawl(link)
-			if !shouldCrawl {
-				// 跳过爬取
-				fmt.Printf("  [URL模式+DOM去重] 跳过: %s\n    原因: %s\n", link, reason)
-				continue
-			}
-			if needsDOMAnalysis {
-				fmt.Printf("  [URL模式+DOM去重] %s (需要DOM分析)\n", reason)
-			}
-		}
+		// 🔧 v4.8: 已废弃 URL模式+DOM去重，使用新的相似URL去重和DOM Embedding替代
 		
 		task := Task{
 			URL:   link,
@@ -2508,9 +2550,45 @@ func (s *Spider) PrintURLPatternDedupReport() {
 }
 
 // PrintURLPatternDOMDedupReport 打印URL模式+DOM去重报告
+// 🔧 v4.8: 已废弃，使用新的 DOM Embedding 替代
 func (s *Spider) PrintURLPatternDOMDedupReport() {
-	if s.urlPatternDOMDedup != nil && s.config.DeduplicationSettings.EnableURLPatternDOMDedup {
-		s.urlPatternDOMDedup.PrintReport()
+	// 功能已被 DOM Embedding 和 相似URL去重 替代，不再需要
+}
+
+// 🆕 v4.7: PrintURLPatternLimiterReport 打印URL模式限流报告
+func (s *Spider) PrintURLPatternLimiterReport() {
+	if s.urlPatternLimiter != nil {
+		s.urlPatternLimiter.PrintReport()
+	}
+}
+
+// 🆕 v4.8: 打印三大优化需求报告
+
+// PrintJSHandlerReport 打印JS特殊处理报告
+func (s *Spider) PrintJSHandlerReport() {
+	if s.jsHandler != nil {
+		s.jsHandler.PrintReport()
+	}
+}
+
+// PrintStaticResourceFilterReport 打印静态资源过滤报告
+func (s *Spider) PrintStaticResourceFilterReport() {
+	if s.staticResourceFilter != nil {
+		s.staticResourceFilter.PrintReport()
+	}
+}
+
+// PrintSimilarURLDedupReport 打印相似URL去重报告
+func (s *Spider) PrintSimilarURLDedupReport() {
+	if s.similarURLDedup != nil {
+		s.similarURLDedup.PrintReport()
+	}
+}
+
+// PrintDOMEmbeddingReport 打印DOM Embedding去重报告
+func (s *Spider) PrintDOMEmbeddingReport() {
+	if s.domEmbeddingDedup != nil {
+		s.domEmbeddingDedup.PrintReport()
 	}
 }
 
@@ -2722,6 +2800,11 @@ func (s *Spider) GetRequestLogger() *RequestLogger {
 // GetDuplicateHandler 获取去重处理器（v4.5新增）
 func (s *Spider) GetDuplicateHandler() *DuplicateHandler {
 	return s.duplicateHandler
+}
+
+// 🆕 v4.7: GetURLPatternLimiter 获取URL模式限流器
+func (s *Spider) GetURLPatternLimiter() *URLPatternLimiter {
+	return s.urlPatternLimiter
 }
 
 // SaveRequestLogsToFile 保存请求日志到文件(文本格式)
